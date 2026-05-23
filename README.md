@@ -1,5 +1,8 @@
 # Social Analyzer — Find Profiles Across 900+ Sites
 
+📦 **Open source · MIT:** [github.com/AnshumanAtrey/social-analyzer](https://github.com/AnshumanAtrey/social-analyzer)
+
+
 Cloud-hosted [qeeqbox/social-analyzer](https://github.com/qeeqbox/social-analyzer) — find a username (a person, brand, or org) across **900+ social media and online platforms** in a single scan. Results stream as structured dataset records (one per detected profile) with confidence scoring, country, category, and extracted metadata.
 
 ## Quick start

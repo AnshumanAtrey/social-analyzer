@@ -1,0 +1,55 @@
+{
+    "actorSpecification": 1,
+    "name": "social-analyzer",
+    "title": "Social Analyzer - Find Profiles Across 900+ Sites",
+    "description": "Wraps the official qeeqbox/social-analyzer OSINT tool. Find a username across 900+ social media and online platforms with confidence scoring, metadata extraction, and country/category filtering. Per-platform dataset records for clean export.",
+    "version": "1.0",
+    "buildTag": "latest",
+    "categories": ["DEVELOPER_TOOLS", "AUTOMATION"],
+    "input": "./INPUT_SCHEMA.json",
+    "output": "./output_schema.json",
+    "dockerfile": "../Dockerfile",
+    "readme": "../README.md",
+    "storages": {
+        "dataset": {
+            "actorSpecification": 1,
+            "title": "Social Analyzer Results",
+            "views": {
+                "profiles": {
+                    "title": "Detected Profiles",
+                    "transformation": {
+                        "fields": ["username", "platform", "link", "status", "rate", "country", "type", "timestamp"]
+                    },
+                    "display": {
+                        "component": "table",
+                        "properties": {
+                            "username": { "label": "Username", "format": "text" },
+                            "platform": { "label": "Platform", "format": "text" },
+                            "link":     { "label": "URL",      "format": "link" },
+                            "status":   { "label": "Confidence", "format": "text" },
+                            "rate":     { "label": "Rate",     "format": "text" },
+                            "country":  { "label": "Country",  "format": "text" },
+                            "type":     { "label": "Category", "format": "text" }
+                        }
+                    }
+                },
+                "summary": {
+                    "title": "Run Summary",
+                    "transformation": {
+                        "fields": ["recordType", "username", "mode", "sitesChecked", "profilesFound", "duration", "timestamp"]
+                    },
+                    "display": {
+                        "component": "table",
+                        "properties": {
+                            "username":      { "label": "Username",     "format": "text" },
+                            "mode":          { "label": "Mode",         "format": "text" },
+                            "sitesChecked":  { "label": "Sites",        "format": "number" },
+                            "profilesFound": { "label": "Found",        "format": "number" },
+                            "duration":      { "label": "Duration (s)", "format": "number" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

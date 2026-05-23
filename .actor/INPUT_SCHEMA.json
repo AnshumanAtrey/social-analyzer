@@ -1,0 +1,161 @@
+{
+    "title": "Social Analyzer Configuration",
+    "description": "Find a username across 900+ social media and online platforms.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "username": {
+            "title": "Username(s)",
+            "type": "string",
+            "description": "Username to investigate. Supports multiple comma-separated: johndoe,janedoe.",
+            "editor": "textfield",
+            "prefill": "elonmusk",
+            "example": "elonmusk"
+        },
+        "mode": {
+            "title": "Detection Mode",
+            "type": "string",
+            "description": "Fast = quick HTTP probing (~30s for top 100). Slow = page analysis. Special = extra OSINT signal extraction.",
+            "default": "fast",
+            "editor": "select",
+            "enum": ["fast", "slow", "special"],
+            "enumTitles": ["Fast (HTTP probing — recommended)", "Slow (page analysis)", "Special (OSINT signal)"]
+        },
+        "top": {
+            "title": "How many sites to scan",
+            "type": "integer",
+            "description": "Scan the top N most popular sites. 100 = ~30s, 500 = ~3 min, 900 = full coverage.",
+            "default": 100,
+            "minimum": 1,
+            "maximum": 900,
+            "editor": "number"
+        },
+        "websites": {
+            "title": "Specific sites (optional, overrides 'How many')",
+            "type": "array",
+            "description": "Pick specific sites to scan. Leave empty to use 'How many sites' above.",
+            "editor": "select",
+            "items": {
+                "type": "string",
+                "enum": [
+                    "facebook", "instagram", "twitter", "tiktok", "youtube",
+                    "github", "gitlab", "linkedin", "reddit", "pinterest",
+                    "tumblr", "medium", "discord", "telegram", "snapchat",
+                    "twitch", "steam", "spotify", "soundcloud", "behance",
+                    "dribbble", "deviantart", "flickr", "vimeo", "vk",
+                    "ok", "naver", "weibo", "patreon", "wordpress",
+                    "blogger", "fandom", "etsy", "ebay", "amazon",
+                    "tradingview", "kaggle", "stackoverflow", "hackernews", "producthunt"
+                ],
+                "enumTitles": [
+                    "Facebook", "Instagram", "Twitter / X", "TikTok", "YouTube",
+                    "GitHub", "GitLab", "LinkedIn", "Reddit", "Pinterest",
+                    "Tumblr", "Medium", "Discord", "Telegram", "Snapchat",
+                    "Twitch", "Steam", "Spotify", "SoundCloud", "Behance",
+                    "Dribbble", "DeviantArt", "Flickr", "Vimeo", "VK (Russia)",
+                    "OK.ru (Russia)", "Naver (Korea)", "Weibo (China)", "Patreon", "WordPress",
+                    "Blogger", "Fandom", "Etsy", "eBay", "Amazon",
+                    "TradingView", "Kaggle", "StackOverflow", "HackerNews", "ProductHunt"
+                ]
+            },
+            "uniqueItems": true
+        },
+        "countries": {
+            "title": "Filter by country (optional)",
+            "type": "array",
+            "description": "Restrict to sites originating from these countries. Leave empty for global.",
+            "editor": "select",
+            "items": {
+                "type": "string",
+                "enum": ["us", "in", "br", "ru", "cn", "jp", "kr", "de", "fr", "gb", "es", "it", "mx", "tr", "id", "vn", "th", "ph", "ae", "sa"],
+                "enumTitles": [
+                    "United States", "India", "Brazil", "Russia", "China", "Japan", "Korea", "Germany", "France", "United Kingdom",
+                    "Spain", "Italy", "Mexico", "Turkey", "Indonesia", "Vietnam", "Thailand", "Philippines", "UAE", "Saudi Arabia"
+                ]
+            },
+            "uniqueItems": true
+        },
+        "siteType": {
+            "title": "Filter by site category (optional)",
+            "type": "string",
+            "description": "Restrict to one site type. Leave on 'Any' for no filter.",
+            "default": "",
+            "editor": "select",
+            "enum": ["", "Social Networks", "Music", "News", "Forum", "Adult", "Gaming", "Photo", "Video", "Blog", "Shopping", "Dating", "Professional"],
+            "enumTitles": [
+                "— Any —",
+                "Social Networks",
+                "Music",
+                "News",
+                "Forum",
+                "Adult content",
+                "Gaming",
+                "Photo sharing",
+                "Video sharing",
+                "Blog platforms",
+                "Shopping / Marketplaces",
+                "Dating",
+                "Professional / LinkedIn-style"
+            ]
+        },
+        "method": {
+            "title": "What to return",
+            "type": "string",
+            "description": "Found-only is cleanest. Use 'All' for debugging or research.",
+            "default": "find",
+            "editor": "select",
+            "enum": ["find", "get", "all"],
+            "enumTitles": [
+                "Found accounts only (recommended)",
+                "All probes (including misses)",
+                "All results (found + missed + failed)"
+            ]
+        },
+        "filter": {
+            "title": "Confidence threshold",
+            "type": "string",
+            "description": "How sure should the detection be?",
+            "default": "good",
+            "editor": "select",
+            "enum": ["good", "good,maybe", "all"],
+            "enumTitles": [
+                "High confidence only (recommended)",
+                "High + Medium confidence",
+                "All matches (including uncertain)"
+            ]
+        },
+        "extract": {
+            "title": "Extract URLs & patterns from found profiles",
+            "type": "boolean",
+            "description": "Pulls emails, links and other patterns from each detected profile.",
+            "default": false,
+            "editor": "checkbox"
+        },
+        "metadata": {
+            "title": "Extract page metadata (Open Graph, Twitter Card)",
+            "type": "boolean",
+            "description": "Adds page title, description, image, and language data per profile.",
+            "default": true,
+            "editor": "checkbox"
+        },
+        "trim": {
+            "title": "Trim long text fields",
+            "type": "boolean",
+            "description": "Cleaner output, recommended.",
+            "default": true,
+            "editor": "checkbox",
+            "sectionCaption": "Advanced",
+            "sectionDescription": "Less common options. Leave defaults for most cases."
+        },
+        "timeout": {
+            "title": "Subprocess timeout (seconds)",
+            "type": "integer",
+            "description": "Hard kill the scanner after this many seconds.",
+            "default": 1800,
+            "minimum": 60,
+            "maximum": 3600,
+            "editor": "number"
+        }
+    },
+    "required": ["username"]
+}

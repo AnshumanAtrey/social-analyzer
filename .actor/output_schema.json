@@ -1,0 +1,14 @@
+{
+    "actorOutputSchemaVersion": 1,
+    "title": "Social Analyzer Output",
+    "description": "Username profile discoveries across social media. One dataset record per detected profile (with confidence rating, country, category, extracted metadata) plus one summary record with aggregate counts.",
+    "type": "object",
+    "properties": {
+        "detectedProfiles": {
+            "type": "string",
+            "title": "Detected Profiles",
+            "description": "One record per discovered profile. Fields: username, platform (site name), link (full profile URL), status (good/maybe/bad), rate (% confidence), country, type (site category), language, rank, extracted (URLs/patterns if --extract), metadata (page metadata if --metadata). Final record has recordType=summary with counts and the executed command.",
+            "template": "{{links.apiDefaultDatasetUrl}}/items"
+        }
+    }
+}

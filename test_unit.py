@@ -12,7 +12,9 @@ apify_stub.Actor = _Actor()
 sys.modules['apify'] = apify_stub
 
 sys.path.insert(0, os.path.dirname(__file__))
-from src.main import build_command, parse_output
+from src.main import (build_command, parse_output, clean_username, valid_username,
+                      confidence_tier, parse_rate)
+import shutil
 
 
 print('=' * 60)
@@ -85,23 +87,58 @@ print('  ✓ error paths handled')
 
 print()
 print('=' * 60)
-print('TEST 6: REAL scan against "github" username (top 10)')
+print('TEST 6: clean_username auto-cleans pasted input')
 print('=' * 60)
-real_cmd = ['social-analyzer', '--username', 'github', '--top', '10', '--mode', 'fast',
-            '--output', 'json', '--method', 'find', '--filter', 'good']
-print(f'  running: {" ".join(real_cmd)}')
-proc = subprocess.run(real_cmd, capture_output=True, text=True, timeout=120)
-print(f'  exit={proc.returncode}, stdout={len(proc.stdout)} chars')
-assert proc.returncode == 0, f'CLI failed: {proc.stderr[:300]}'
+clean_cases = {
+    'elonmusk': 'elonmusk',
+    '@elonmusk': 'elonmusk',
+    'https://twitter.com/elonmusk': 'elonmusk',
+    'twitter.com/elonmusk': 'elonmusk',
+    'https://instagram.com/elonmusk/': 'elonmusk',
+    'https://www.linkedin.com/in/elonmusk': 'elonmusk',
+    '  @elonmusk  ': 'elonmusk',
+    'johndoe,janedoe': 'johndoe janedoe',     # comma list -> space-joined
+    '@a, @b': 'a b',
+    'github.com/torvalds': 'torvalds',
+}
+for raw, want in clean_cases.items():
+    got = clean_username(raw)
+    assert got == want, f'clean_username({raw!r}) -> {got!r}, expected {want!r}'
+print(f'  ✓ {len(clean_cases)} cases pass (@, profile links, comma lists all handled)')
 
-parsed = parse_output(proc.stdout)
-assert 'parse_error' not in parsed, f'parse error: {parsed.get("parse_error")}'
-detected = parsed.get('detected', [])
-print(f'  detected: {len(detected)} profiles')
-for p in detected[:5]:
-    print(f'    - {p.get("title") or p.get("text","?")[:30]:30s} {p.get("status","?"):6s} {p.get("link","")[:60]}')
-assert len(detected) >= 1, 'expected at least 1 profile for "github" username'
-print('  ✓ real scan returned detections')
+print()
+print('=' * 60)
+print('TEST 7: valid_username + confidence_tier')
+print('=' * 60)
+for h in ['elonmusk', 'john.doe', 'a_b-c', 'johndoe janedoe']:
+    assert valid_username(h), f'should be valid: {h!r}'
+for h in ['', 'foo/bar', 'a b!', 'has space/slash']:
+    assert not valid_username(h), f'should be invalid: {h!r}'
+assert valid_username(clean_username('@still')) and clean_username('@still') == 'still'
+for rate, tier in [('%100.0', 'high'), ('80%', 'high'), ('%60', 'medium'), ('%20', 'low'), (None, 'unknown')]:
+    assert confidence_tier(rate) == tier, f'confidence_tier({rate!r}) -> {confidence_tier(rate)!r}, want {tier!r}'
+assert parse_rate('%66.6') == 66.6
+print('  ✓ validation gate + confidence tiers correct')
+
+print()
+print('=' * 60)
+print('TEST 8: REAL scan against "github" (skipped if CLI not installed)')
+print('=' * 60)
+if shutil.which('social-analyzer'):
+    real_cmd = ['social-analyzer', '--username', 'github', '--top', '10', '--mode', 'fast',
+                '--output', 'json', '--method', 'find', '--filter', 'good']
+    print(f'  running: {" ".join(real_cmd)}')
+    proc = subprocess.run(real_cmd, capture_output=True, text=True, timeout=120)
+    print(f'  exit={proc.returncode}, stdout={len(proc.stdout)} chars')
+    assert proc.returncode == 0, f'CLI failed: {proc.stderr[:300]}'
+    parsed = parse_output(proc.stdout)
+    assert 'parse_error' not in parsed, f'parse error: {parsed.get("parse_error")}'
+    detected = parsed.get('detected', [])
+    print(f'  detected: {len(detected)} profiles')
+    assert len(detected) >= 1, 'expected at least 1 profile for "github" username'
+    print('  ✓ real scan returned detections')
+else:
+    print('  - social-analyzer CLI not installed locally; skipping (runs in the Docker image)')
 
 print()
 print('ALL TESTS PASS ✓')

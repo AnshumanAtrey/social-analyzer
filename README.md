@@ -1,34 +1,35 @@
-# Social Analyzer - Username OSINT Across 900+ Sites
+# Social Analyzer - Find Social Profiles by Username
 
-Cloud-hosted social-analyzer for username search across 900+ social media and online platforms with confidence scoring and metadata extraction.
+Find someone's social media profiles from just a username. We search 900+ sites - social, gaming, dating, professional - and rank every hit by confidence. No login, no cookies, no API key.
 
-Available as an [Apify Actor](https://apify.com/anshumanatrey/social-analyzer). Pay-per-event. Cheaper than Maltego CE or Spiderfoot HX subscriptions.
+Available as an [Apify Actor](https://apify.com/anshumanatrey/social-analyzer). Pay only per profile found. No login, no cookies, no API key needed.
 
 ---
 
 ## What does it do?
 
-Takes a username and searches 900+ platforms - social media, gaming, dating, professional, niche sites - to find profiles matching that handle. Each result includes a confidence score (high / medium / low) to reduce false positives, plus available metadata (display name, bio, follower count where exposed). Supports country and category filtering for targeted searches.
+Enter a username, or paste a profile link and we clean it down to the handle, and we search 900+ platforms in parallel - social media, gaming, dating, professional and niche sites - for accounts using that handle. Every hit is confidence-ranked (high / medium / low) so the real profiles surface first and long-shot guesses stay clearly marked, with metadata (display name, bio, image) where the page exposes it. Results come back as one clean row per profile, ready for a spreadsheet, a CRM, or a case file.
 
 ## How is it different from Sherlock CLI (300 sites only)?
 
 | | Sherlock CLI (300 sites only) | This actor |
 |---|---|---|
-| Sites covered | Sherlock 300, WhatsMyName 600, Maigret 3000 (slow) | 900+ with parallel queries |
-| Confidence scoring | Boolean only | High / Medium / Low scoring |
+| Setup | pip install + Python deps | Open the page, type a handle, press start |
+| Input | Exact handle only | Paste a handle or profile link, we clean it |
+| Sites covered | Sherlock 300, WhatsMyName 600 | 900+ with parallel queries |
+| Confidence | Boolean only | High / Medium / Low, strongest first |
 | Filtering | All-or-nothing | Country and category filtering |
-| Metadata | Profile URL only | Display name, bio, follower count where available |
-| Output | Terminal log | Structured per-profile dataset |
+| Output | Terminal log | One clean row per profile, export to CSV or CRM |
 
 Wraps qeeqbox/social-analyzer (3,000+ GitHub stars), the most comprehensive username-search OSINT tool by site coverage.
 
 ## When should I use it?
 
-- OSINT investigation - build a full digital footprint from one username
-- Doxxing prevention audit - check your own exposure across 900+ sites
-- Missing person investigation - cross-platform identity correlation
-- Fraud investigation - find a scammer's other profiles
-- Background check by handle for hiring or due diligence
+- Recruiting and hiring - check a candidate's public profiles across the web from one handle
+- People search - find all the accounts a person uses, from a single username
+- Fraud and trust teams - find a scammer's or seller's other profiles
+- Dating safety and self-checks - see what someone, or you, expose across 900+ sites
+- Investigations and due diligence - build a cross-platform footprint for a case or a deal
 
 ## What does it cost?
 
@@ -48,10 +49,10 @@ Pay-per-event:
 
 | Field | Required | What it does |
 |---|---|---|
-| `usernames` | yes | Array of usernames to investigate |
-| `countries` | no | Filter to specific country codes (BR, IN, DE, etc.) |
-| `categories` | no | Filter by category (dating, gaming, professional, news) |
-| `confidence_min` | no | Minimum confidence score (default: medium) |
+| `username` | yes | The handle to search. Paste an @handle or profile link and we clean it. Comma-separate for multiple. |
+| `mode` | no | Scan depth: fast (default), slow, or special. |
+| `top` | no | How many of the most popular sites to scan. Default 100. |
+| `countries / siteType / filter` | no | Optional filters: country, site category, and confidence threshold. |
 
 ## What does the output look like?
 
@@ -59,13 +60,14 @@ Each dataset record:
 
 ```json
 {
-  "username": "anshumanatrey",
-  "platform": "github",
-  "url": "https://github.com/anshumanatrey",
+  "recordType": "profile",
+  "username": "elonmusk",
+  "platform": "GitHub",
+  "link": "https://github.com/elonmusk",
   "confidence": "high",
-  "display_name": "Anshuman Atrey",
-  "bio": "purple-team hacker | AI agents | drone defence",
-  "followers": 250
+  "rate": "100.0%",
+  "type": "Social",
+  "timestamp": "2026-06-30T14:00:00Z"
 }
 ```
 
@@ -76,6 +78,12 @@ Each dataset record:
 **Q: How does this compare to Maigret?** Maigret covers more sites (3000+) but is slower. social-analyzer is the speed-vs-coverage sweet spot.
 
 **Q: Site missing?** DM LinkedIn. Custom site additions ship within 1-2 hours.
+
+**Q: My run found nothing, or the links look wrong?** Enter just the handle, like elonmusk, not @elonmusk or a full profile link. We clean those, but a clean handle is safest. Check the spelling, and sort by confidence to see the strongest matches first.
+
+**Q: Do I enter the @ or a profile link?** Just the handle is best, like elonmusk. If you paste @elonmusk or a link like twitter.com/elonmusk, we clean it down to the handle automatically.
+
+**Q: How do I know which matches are real?** Every profile gets a confidence tier (high / medium / low) from its match rate, and results are sorted strongest-first. High-confidence hits are the safest; low ones are guesses worth a quick check.
 
 ---
 

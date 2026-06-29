@@ -1,11 +1,11 @@
 {
     "actorSpecification": 1,
     "name": "social-analyzer",
-    "title": "Social Analyzer - Find Profiles Across 900+ Sites",
-    "description": "Wraps the official qeeqbox/social-analyzer OSINT tool. Find a username across 900+ social media and online platforms with confidence scoring, metadata extraction, and country/category filtering. Per-platform dataset records for clean export.",
+    "title": "Social Analyzer - Find Social Profiles by Username",
+    "description": "Find someone's social media profiles from just a username, across 900+ sites. Paste a handle or a profile link (we clean it), get confidence-ranked results. No login, no cookies, no API key. Clean per-profile export for recruiting, fraud checks, and people search.",
     "version": "1.0",
     "buildTag": "latest",
-    "categories": ["DEVELOPER_TOOLS", "AUTOMATION"],
+    "categories": ["LEAD_GENERATION", "DEVELOPER_TOOLS", "AUTOMATION"],
     "input": "./INPUT_SCHEMA.json",
     "output": "./output_schema.json",
     "dockerfile": "../Dockerfile",
@@ -18,18 +18,18 @@
                 "profiles": {
                     "title": "Detected Profiles",
                     "transformation": {
-                        "fields": ["username", "platform", "link", "status", "rate", "country", "type", "timestamp"]
+                        "fields": ["username", "platform", "link", "confidence", "rate", "country", "type", "timestamp"]
                     },
                     "display": {
                         "component": "table",
                         "properties": {
-                            "username": { "label": "Username", "format": "text" },
-                            "platform": { "label": "Platform", "format": "text" },
-                            "link":     { "label": "URL",      "format": "link" },
-                            "status":   { "label": "Confidence", "format": "text" },
-                            "rate":     { "label": "Rate",     "format": "text" },
-                            "country":  { "label": "Country",  "format": "text" },
-                            "type":     { "label": "Category", "format": "text" }
+                            "username":   { "label": "Username",   "format": "text" },
+                            "platform":   { "label": "Platform",   "format": "text" },
+                            "link":       { "label": "URL",        "format": "link" },
+                            "confidence": { "label": "Confidence", "format": "text" },
+                            "rate":       { "label": "Match rate", "format": "text" },
+                            "country":    { "label": "Country",    "format": "text" },
+                            "type":       { "label": "Category",   "format": "text" }
                         }
                     }
                 },

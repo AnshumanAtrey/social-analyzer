@@ -1,39 +1,41 @@
 {
-    "title": "Social Analyzer Configuration",
-    "description": "Find a username across 900+ social media and online platforms.",
+    "title": "Find social media profiles by username",
+    "description": "Enter a username and we find the matching profiles across 900+ sites, ranked by confidence. Just the handle is needed - everything else is optional.",
     "type": "object",
     "schemaVersion": 1,
     "properties": {
         "username": {
-            "title": "Username(s)",
+            "title": "Username",
             "type": "string",
-            "description": "Username to investigate. Supports multiple comma-separated: johndoe,janedoe.",
+            "description": "The handle to search, for example elonmusk. Enter just the handle - paste an @handle or a profile link like twitter.com/elonmusk and we clean it down to the handle. Comma-separate to search several at once: johndoe, janedoe.",
             "editor": "textfield",
             "prefill": "elonmusk",
             "example": "elonmusk"
         },
         "mode": {
-            "title": "Detection Mode",
+            "title": "Scan depth",
             "type": "string",
-            "description": "Fast = quick HTTP probing (~30s for top 100). Slow = page analysis. Special = extra OSINT signal extraction.",
+            "description": "How deep to scan. Fast probes the top sites quickly (about 30s for 100 sites) and is best for most runs. Slow reads each page for more detail. Special pulls extra OSINT signals.",
             "default": "fast",
             "editor": "select",
             "enum": ["fast", "slow", "special"],
-            "enumTitles": ["Fast (HTTP probing — recommended)", "Slow (page analysis)", "Special (OSINT signal)"]
+            "enumTitles": ["Fast (quick, recommended)", "Slow (reads each page)", "Special (extra OSINT signals)"],
+            "sectionCaption": "Scan options",
+            "sectionDescription": "Control how wide and deep the search goes, and how it is filtered. The defaults work well for most runs."
         },
         "top": {
             "title": "How many sites to scan",
             "type": "integer",
-            "description": "Scan the top N most popular sites. 100 = ~30s, 500 = ~3 min, 900 = full coverage.",
+            "description": "Scan the top N most popular sites. 100 is about 30s, 500 about 3 minutes, 900 is full coverage.",
             "default": 100,
             "minimum": 1,
             "maximum": 900,
             "editor": "number"
         },
         "websites": {
-            "title": "Specific sites (optional, overrides 'How many')",
+            "title": "Specific sites only (optional)",
             "type": "array",
-            "description": "Pick specific sites to scan. Leave empty to use 'How many sites' above.",
+            "description": "Scan only these specific sites instead of going by popularity. Leave empty to use 'How many sites to scan' above.",
             "editor": "select",
             "items": {
                 "type": "string",
@@ -63,7 +65,7 @@
         "countries": {
             "title": "Filter by country (optional)",
             "type": "array",
-            "description": "Restrict to sites originating from these countries. Leave empty for global.",
+            "description": "Only scan sites based in these countries. Leave empty to search globally.",
             "editor": "select",
             "items": {
                 "type": "string",
@@ -78,12 +80,12 @@
         "siteType": {
             "title": "Filter by site category (optional)",
             "type": "string",
-            "description": "Restrict to one site type. Leave on 'Any' for no filter.",
+            "description": "Only scan one category of site. Leave on Any for no filter.",
             "default": "",
             "editor": "select",
             "enum": ["", "Social Networks", "Music", "News", "Forum", "Adult", "Gaming", "Photo", "Video", "Blog", "Shopping", "Dating", "Professional"],
             "enumTitles": [
-                "— Any —",
+                "Any",
                 "Social Networks",
                 "Music",
                 "News",
@@ -101,7 +103,7 @@
         "method": {
             "title": "What to return",
             "type": "string",
-            "description": "Found-only is cleanest. Use 'All' for debugging or research.",
+            "description": "Found accounts only is the cleanest. The other options also include misses, which is useful for research.",
             "default": "find",
             "editor": "select",
             "enum": ["find", "get", "all"],
@@ -114,43 +116,43 @@
         "filter": {
             "title": "Confidence threshold",
             "type": "string",
-            "description": "How sure should the detection be?",
+            "description": "How sure a match must be to count. High confidence is the cleanest and is recommended.",
             "default": "good",
             "editor": "select",
             "enum": ["good", "good,maybe", "all"],
             "enumTitles": [
                 "High confidence only (recommended)",
-                "High + Medium confidence",
+                "High + medium confidence",
                 "All matches (including uncertain)"
             ]
         },
         "extract": {
-            "title": "Extract URLs & patterns from found profiles",
+            "title": "Pull emails & links from found profiles",
             "type": "boolean",
-            "description": "Pulls emails, links and other patterns from each detected profile.",
+            "description": "Pulls emails, links and other patterns out of each detected profile.",
             "default": false,
-            "editor": "checkbox"
+            "editor": "checkbox",
+            "sectionCaption": "Advanced",
+            "sectionDescription": "Less common options. The defaults are fine for most runs."
         },
         "metadata": {
-            "title": "Extract page metadata (Open Graph, Twitter Card)",
+            "title": "Add page metadata (name, bio, image)",
             "type": "boolean",
-            "description": "Adds page title, description, image, and language data per profile.",
+            "description": "Adds each profile's page title, description, image and language.",
             "default": true,
             "editor": "checkbox"
         },
         "trim": {
             "title": "Trim long text fields",
             "type": "boolean",
-            "description": "Cleaner output, recommended.",
+            "description": "Trims very long text fields for cleaner output. Recommended.",
             "default": true,
-            "editor": "checkbox",
-            "sectionCaption": "Advanced",
-            "sectionDescription": "Less common options. Leave defaults for most cases."
+            "editor": "checkbox"
         },
         "timeout": {
-            "title": "Subprocess timeout (seconds)",
+            "title": "Time limit (seconds)",
             "type": "integer",
-            "description": "Hard kill the scanner after this many seconds.",
+            "description": "Stop the scan after this many seconds and return whatever was found. Default 1800 (30 minutes).",
             "default": 1800,
             "minimum": 60,
             "maximum": 3600,

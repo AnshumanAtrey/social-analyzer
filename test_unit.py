@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.main import (  # noqa: E402
     build_command, parse_output, parse_usernames, clean_handle, category_of, host_of,
     platform_name, select_sites, enrich, confidence_tier, parse_rate, safe_status,
-    CATEGORY_TITLES, MAX_USERNAMES,
+    keep_by_confidence, clean_value, CATEGORY_TITLES, MAX_USERNAMES, SCANNER_FIELDS,
 )
 
 passed = 0
@@ -153,13 +153,16 @@ assert sel is None and 'unavailable' in info['error']
 ok('select_sites: without sites.json the scanner falls back to its own top N')
 
 # 5. build_command --------------------------------------------------------------
-cmd = build_command('elonmusk', top=100, site_urls=None, confidence_filter='good', extract=False, metadata=True)
-assert cmd[:3] == ['social-analyzer', '--username', 'elonmusk'] and '--top' in cmd and '100' in cmd
-assert '--mode' in cmd and cmd[cmd.index('--mode') + 1] == 'fast' and '--metadata' in cmd and '--extract' not in cmd
-cmd = build_command('x', top=100, site_urls=['https://github.com/{username}', 'https://reddit.com/user/{username}'], confidence_filter='good,maybe', extract=True, metadata=False)
-assert '--websites' in cmd and cmd[cmd.index('--websites') + 1] == 'https://github.com/{username} https://reddit.com/user/{username}' and '--top' not in cmd
-assert cmd[cmd.index('--filter') + 1] == 'good,maybe' and '--extract' in cmd and '--metadata' not in cmd
-ok('build_command: top vs exact site URLs, filters and flags wired; always fast mode')
+cmd = build_command('elonmusk', top=100, site_urls=None, extract=False, metadata=True)
+assert cmd[:4] == [sys.executable, '-m', 'src.scan', '--workers'] and '--top' in cmd and '100' in cmd
+assert cmd[cmd.index('--mode') + 1] == 'fast' and cmd[cmd.index('--method') + 1] == 'all'
+assert cmd[cmd.index('--filter') + 1] == 'all' and cmd[cmd.index('--profiles') + 1] == 'all'
+assert cmd[cmd.index('--options') + 1] == SCANNER_FIELDS and 'status' in SCANNER_FIELDS and 'metadata' in SCANNER_FIELDS
+assert '--metadata' in cmd and '--extract' not in cmd
+cmd = build_command('x', top=100, site_urls=['https://github.com/{username}', 'https://reddit.com/user/{username}'], extract=True, metadata=False)
+assert cmd[cmd.index('--websites') + 1] == 'https://github.com/{username} https://reddit.com/user/{username}' and '--top' not in cmd
+assert '--extract' in cmd and '--metadata' not in cmd
+ok('build_command: launcher with workers, every field requested, no scanner-side filter, exact site URLs')
 
 # 6. parse_output ---------------------------------------------------------------
 assert parse_output('{"detected":[{"link":"https://x.com/a","rate":"%100.0"}]}')['detected'][0]['link'] == 'https://x.com/a'
@@ -169,16 +172,20 @@ assert 'parse_error' in parse_output('not json')
 ok('parse_output: JSON, banner-wrapped JSON, empty and garbage stdout')
 
 # 7. confidence + enrich ----------------------------------------------------------
-for rate, tier in [('%100.0', 'high'), ('80%', 'high'), ('%60', 'medium'), ('%20', 'low'), (None, 'unknown')]:
-    assert confidence_tier(rate) == tier
+for rate, tier in [('%100.0', 'high'), ('80%', 'medium'), ('%60', 'medium'), ('%20', 'low'), (None, 'unknown')]:
+    assert confidence_tier(rate) == tier, (rate, tier, confidence_tier(rate))
+profiles = [{'rate': '%100.0'}, {'rate': '%66.67'}, {'rate': '%25.0'}]
+assert len(keep_by_confidence(profiles, 'good')) == 1 and len(keep_by_confidence(profiles, 'good,maybe')) == 2 and len(keep_by_confidence(profiles, 'all')) == 3
+assert clean_value('unavailable') is None and clean_value('') is None and clean_value('English') == 'English'
 assert parse_rate('%66.6') == 66.6
 index = {s['host']: s for s in SITES}
-row = enrich({'link': 'https://github.com/torvalds', 'rate': '%100.0', 'title': 'torvalds (Linus Torvalds)', 'text': 'Linus'}, 'torvalds', index, '2026-09-12T00:00:00Z')
+row = enrich({'link': 'https://github.com/torvalds', 'rate': '%100.0', 'title': 'torvalds (Linus Torvalds)', 'text': 'Linus', 'language': 'English', 'metadata': [{'property': 'og:title', 'content': 'torvalds'}], 'extracted': 'unavailable'}, 'torvalds', index, '2026-09-12T00:00:00Z')
+assert row['language'] == 'English' and row['metadata'][0]['content'] == 'torvalds' and row['extracted'] is None
 assert row['platform'] == 'GitHub' and row['site'] == 'github.com' and row['confidence'] == 'high' and row['matchRate'] == 100.0
 assert row['category'] == 'developer_tech' and row['country'] == 'United States' and row['adultSite'] is False and row['siteRank'] == 50
 row = enrich({'link': 'https://unknown.example/u', 'rate': '%25.0'}, 'u', index, 'now')
 assert row['category'] == 'other' and row['country'] is None and row['confidence'] == 'low'
-ok('enrich: rows carry platform, site, confidence, category, country, adult flag, rank')
+ok('enrich: rows carry platform, site, confidence, category, country, adult flag, rank, language, metadata')
 
 # 8. safe_status never raises ---------------------------------------------------------
 asyncio.run(safe_status('Found 202 profiles'))
@@ -191,12 +198,15 @@ ok('summary row shape is serialisable')
 
 # 10. real scan (optional) -------------------------------------------------------------
 if shutil.which('social-analyzer'):
-    cmd = build_command('torvalds', top=100, site_urls=['https://github.com/{username}', 'https://reddit.com/user/{username}'], confidence_filter='good', extract=False, metadata=False)
+    cmd = build_command('torvalds', top=100, site_urls=['https://github.com/{username}', 'https://reddit.com/user/{username}'], extract=False, metadata=False)
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     parsed = parse_output(proc.stdout)
     links = [p['link'] for p in parsed.get('detected', [])]
     assert 'https://github.com/torvalds' in links, (proc.returncode, proc.stdout[:200], proc.stderr[:200])
-    ok(f'real scan: torvalds found on {len(links)} of 2 named sites')
+    gh = next(p for p in parsed['detected'] if p['link'] == 'https://github.com/torvalds')
+    assert gh.get('status') == 'good' and 'language' in gh and 'type' in gh, gh.keys()
+    assert proc.stderr.strip() == '', f'launcher should silence scanner warnings, got: {proc.stderr[:200]}'
+    ok(f'real scan through src/scan.py: torvalds found on {len(links)} of 2 named sites, all fields present, stderr clean')
 else:
     print('  --  real scan skipped (social-analyzer CLI not installed here; it runs in the Docker image)')
 

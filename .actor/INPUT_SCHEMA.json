@@ -1,6 +1,6 @@
 {
   "title": "Find social media profiles by username",
-  "description": "Type one username, or several, and get every public profile that uses it across 999 sites, ranked by how sure we are. Only the username is needed; everything else narrows the search.",
+  "description": "Type one username, or several, and get every public profile that uses it. Every run checks all 999 sites the scanner knows and returns every detail it can read. Only the username is needed; the rest narrows the search.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -16,7 +16,7 @@
     "usernames": {
       "title": "More usernames (bulk)",
       "type": "array",
-      "description": "One handle per line for bulk checks, up to 25 per run. Each username is scanned on its own, so 10 usernames take about 10 times as long as one.",
+      "description": "One handle per line for bulk checks, up to 25 per run. Each username is scanned on its own: all 999 sites take about 3 minutes per username, so for more than 8 usernames lower 'How many sites to check' or raise the time limit.",
       "editor": "stringList",
       "example": [
         "johndoe",
@@ -28,9 +28,9 @@
     "top": {
       "title": "How many sites to check",
       "type": "integer",
-      "description": "The most popular N sites from the list of 999. 100 sites take about 30 to 40 seconds per username, 300 about 2 minutes, all 999 about 7 minutes.",
-      "default": 100,
-      "prefill": 100,
+      "description": "All 999 sites by default, the deepest scan possible, about 3 minutes per username. Lower it to check only the most popular N sites: 100 sites take about 30 seconds.",
+      "default": 999,
+      "prefill": 999,
       "minimum": 10,
       "maximum": 999,
       "editor": "number",
@@ -152,8 +152,8 @@
     "filter": {
       "title": "Which matches to keep",
       "type": "string",
-      "description": "How sure a match must be before it is reported. Confident matches are the cleanest. Include possible matches when the handle is rare and you want every lead; expect a few wrong ones.",
-      "default": "good",
+      "description": "How sure a match must be before it is reported. Confident = the site answered exactly as a real profile does (100% match). Possible = 50 to 99%, likely but worth a manual look; some sites answer with a normal page for any handle. The default keeps both; choose confident-only for the cleanest list, or everything to include weak guesses below 50%.",
+      "default": "good,maybe",
       "editor": "select",
       "enum": [
         "good",
@@ -161,8 +161,8 @@
         "all"
       ],
       "enumTitles": [
-        "Confident matches only (recommended)",
-        "Confident and possible matches",
+        "Confident matches only (100%)",
+        "Confident and possible matches (50% and up, recommended)",
         "Everything, including weak guesses"
       ],
       "sectionCaption": "Results",
@@ -171,7 +171,7 @@
     "metadata": {
       "title": "Add page details (title, description, image, language)",
       "type": "boolean",
-      "description": "Reads each found profile page for its title, description, image and language when the site exposes them. On by default; turn off for the fastest possible run.",
+      "description": "Reads each confident profile page for its meta tags (title, description, image, type) and detects the page language. On by default.",
       "default": true,
       "editor": "checkbox"
     },
@@ -185,7 +185,7 @@
     "timeout": {
       "title": "Time limit (seconds)",
       "type": "integer",
-      "description": "The whole run stops after this many seconds. Usernames that could not start in time are listed in the summary instead of failing the run. A username on 100 sites needs about 40 seconds; on all 999 about 7 minutes.",
+      "description": "The whole run stops after this many seconds (maximum 3600). Usernames that could not start in time are listed in the summary instead of failing the run. One username on all 999 sites needs about 3 minutes.",
       "default": 1800,
       "minimum": 60,
       "maximum": 3600,

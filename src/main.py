@@ -16,6 +16,11 @@ Wraps the qeeqbox/social-analyzer CLI in fast mode and adds what real user runs
   people who run this are investigators, and that is where the leads are.
 - Rows enriched with the site's category, country and adult flag (the CLI returns
   only link, rate, title, text).
+- Every scan is as deep as the scanner can go: all 999 sites by default, every output
+  field it can produce (status, language, metadata, extracted patterns), and its most
+  permissive detection level. The scanner's "slow" and "special" modes have no code
+  behind them in 0.45, and its "extreme" level is a stricter gate that returns fewer
+  hits, so neither is offered. Depth here means sites and detail, not a mode.
 - A status message that can never fail the run. SDK 3.x validates the run object
   against an enum that lacks the new APIFY_AI run origin; the message is stored
   server-side before that parse, so a parse error is logged, not raised.
@@ -37,7 +42,9 @@ from urllib.parse import urlparse
 from apify import Actor
 
 TOOL = 'social-analyzer'
-MAX_USERNAMES = 25            # one CLI run per username; 25 x 100 sites stays under an hour
+SCANNER_WORKERS = 60          # the CLI hardcodes 15; 60 does all 999 sites in about 2 minutes
+SCANNER_FIELDS = 'link,rate,title,text,status,type,country,language,rank,extracted,metadata'
+MAX_USERNAMES = 25            # one scanner run per username
 MIN_SECONDS_PER_USERNAME = 20  # do not start a handle we cannot finish
 RUN_SAFETY_MARGIN_S = 60      # leave time to write the summary before the platform kills us
 HOLEHE_URL = 'https://apify.com/anshumanatrey/holehe-email-osint'
@@ -108,6 +115,15 @@ COUNTRY_ALIASES = {
 # --------------------------------------------------------------------------- sites --
 def find_sites_json() -> Path | None:
     """sites.json ships inside the pip package as social-analyzer/data/sites.json."""
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec('social-analyzer')
+        for loc in (spec.submodule_search_locations or []) if spec else []:
+            p = Path(loc) / 'data' / 'sites.json'
+            if p.is_file():
+                return p
+    except Exception:  # noqa: BLE001
+        pass
     candidates = [Path(sysconfig.get_paths()['purelib']), Path(sysconfig.get_paths()['platlib'])]
     candidates += [Path(p) for p in sys.path if p]
     tool = shutil.which(TOOL)
@@ -307,13 +323,19 @@ def select_sites(inp: dict, sites: list[dict], top: int) -> tuple[list[dict] | N
 
 
 # ------------------------------------------------------------------------- tool --
-def build_command(username: str, *, top: int, site_urls: list[str] | None, confidence_filter: str,
-                  extract: bool, metadata: bool) -> list[str]:
-    """--websites gets the exact URL patterns from sites.json. The scanner matches
-    tokens as substrings of a site's URL, so a bare host like t.me would also select
-    about.me; the full pattern selects exactly one entry."""
-    cmd = [TOOL, '--username', username, '--output', 'json', '--mode', 'fast',
-           '--method', 'find', '--filter', confidence_filter, '--options', 'link,rate,title,text', '--trim']
+def build_command(username: str, *, top: int, site_urls: list[str] | None, extract: bool, metadata: bool) -> list[str]:
+    """Run the scanner through src/scan.py (same CLI, more workers).
+
+    Always asks for every field the scanner can emit, for all probed sites (method all,
+    profiles all) with no confidence filter: the confidence filter is applied here, on
+    the match rate, because the scanner's own --filter silently does nothing unless
+    `status` is among the requested fields. --websites gets exact URL patterns from
+    sites.json; a bare host token would over-match (t.me also selects about.me).
+    """
+    cmd = [sys.executable, '-m', 'src.scan', '--workers', str(SCANNER_WORKERS),
+           '--username', username, '--output', 'json', '--mode', 'fast',
+           '--method', 'all', '--filter', 'all', '--profiles', 'all',
+           '--options', SCANNER_FIELDS, '--trim']
     if site_urls:
         cmd += ['--websites', ' '.join(site_urls)]
     else:
@@ -351,10 +373,25 @@ def parse_rate(rate) -> float | None:
 
 
 def confidence_tier(rate) -> str:
+    """Same thresholds as the scanner's own status: good = 100%, maybe = 50-99%, bad = below."""
     v = parse_rate(rate)
     if v is None:
         return 'unknown'
-    return 'high' if v >= 75 else 'medium' if v >= 50 else 'low'
+    return 'high' if v >= 100 else 'medium' if v >= 50 else 'low'
+
+
+MIN_RATE = {'good': 100.0, 'good,maybe': 50.0, 'all': 0.0}
+
+
+def keep_by_confidence(profiles: list[dict], confidence_filter: str) -> list[dict]:
+    """Confident only = 100% match; confident and possible = 50% and up; all = everything."""
+    floor = MIN_RATE.get(confidence_filter, 100.0)
+    return [p for p in profiles if (parse_rate(p.get('rate')) or 0) >= floor]
+
+
+def clean_value(v):
+    """The scanner writes the string 'unavailable' where it has nothing."""
+    return None if v in (None, '', 'unavailable') else v
 
 
 def enrich(profile: dict, username: str, site_index: dict[str, dict], checked_at: str) -> dict:
@@ -381,10 +418,11 @@ def enrich(profile: dict, username: str, site_index: dict[str, dict], checked_at
         'country': site.get('country'),
         'adultSite': bool(site.get('adult', False)),
         'siteRank': site.get('rank'),
-        'pageTitle': profile.get('title'),
-        'pageText': profile.get('text'),
-        'extracted': profile.get('extracted'),
-        'metadata': profile.get('metadata'),
+        'pageTitle': clean_value(profile.get('title')),
+        'pageText': clean_value(profile.get('text')),
+        'language': clean_value(profile.get('language')),
+        'metadata': clean_value(profile.get('metadata')),
+        'extracted': clean_value(profile.get('extracted')),
         'checkedAt': checked_at,
     }
 
@@ -434,10 +472,10 @@ async def main() -> None:
                 'and we will ship a fixed build within hours.'))
             return
 
-        top = max(10, min(int(inp.get('top') or 100), 999))
-        confidence_filter = inp.get('filter') or 'good'
+        top = max(10, min(int(inp.get('top') or 999), 999))
+        confidence_filter = inp.get('filter') or 'good,maybe'
         if confidence_filter not in ('good', 'good,maybe', 'all'):
-            confidence_filter = 'good'
+            confidence_filter = 'good,maybe'
         extract = bool(inp.get('extract', False))
         metadata = bool(inp.get('metadata', True))
 
@@ -495,13 +533,12 @@ async def main() -> None:
             if remaining < MIN_SECONDS_PER_USERNAME:
                 skipped_for_time.append(username)
                 continue
-            cmd = build_command(username, top=top, site_urls=site_urls, confidence_filter=confidence_filter,
-                                extract=extract, metadata=metadata)
+            cmd = build_command(username, top=top, site_urls=site_urls, extract=extract, metadata=metadata)
             Actor.log.info(f'[{i}/{len(targets)}] {username}: checking {sites_per_username} sites')
             t0 = time.monotonic()
             entry = {'username': username, 'original': t['original'], 'fromEmail': t['fromEmail'],
                      'sitesChecked': sites_per_username, 'profilesFound': 0, 'high': 0, 'medium': 0,
-                     'low': 0, 'sitesFailed': 0, 'sitesUnclear': 0, 'seconds': 0.0, 'note': None}
+                     'low': 0, 'sitesNotFound': 0, 'sitesFailed': 0, 'seconds': 0.0, 'note': None}
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=max(10, remaining))
             except subprocess.TimeoutExpired:
@@ -525,9 +562,9 @@ async def main() -> None:
                 per_username.append(entry)
                 continue
 
-            detected = parsed.get('detected') or []
+            detected = keep_by_confidence(parsed.get('detected') or [], confidence_filter)
             entry['sitesFailed'] = len(parsed.get('failed') or [])
-            entry['sitesUnclear'] = len(parsed.get('unknown') or [])
+            entry['sitesNotFound'] = len(parsed.get('unknown') or []) + (len(parsed.get('detected') or []) - len(detected))
             detected.sort(key=lambda p: parse_rate(p.get('rate')) or 0, reverse=True)
             rows = [enrich(p, username, site_index, checked_at) for p in detected]
             if rows:
@@ -539,30 +576,37 @@ async def main() -> None:
             for k in ('high', 'medium', 'low'):
                 totals[k] += entry[k]
             totals['failed'] += entry['sitesFailed']
-            totals['unknown'] += entry['sitesUnclear']
+            totals['unknown'] += entry['sitesNotFound']
             if not rows:
-                entry['note'] = 'no profile with this exact handle on the sites checked'
+                entry['note'] = 'no profile with this exact handle on the sites checked (or none above your confidence setting)'
             per_username.append(entry)
             Actor.log.info(f'{username}: {len(rows)} profiles ({entry["high"]} high confidence) in {entry["seconds"]}s')
 
         # ---- summary: one row (charged like a profile row) and one free OUTPUT record
         duration = round(time.monotonic() - started, 1)
         checked = [e for e in per_username if e['note'] is None or e['note'].startswith('no profile')]
+        timed_out = [e['username'] for e in per_username if e['note'] and e['note'].startswith('did not finish')]
         if skipped_for_time:
             notes.append(f'Time limit reached before {len(skipped_for_time)} username(s) could start: '
                          f'{", ".join(skipped_for_time)}. Raise the time limit or check fewer sites.')
 
         if totals['profiles'] == 0 and len(checked) == len(targets):
+            widen = ('Try the "confident and possible" setting to see weaker matches.' if confidence_filter == 'good'
+                     else 'Try "everything" to see weak guesses too.' if confidence_filter == 'good,maybe' else '')
             headline = (f'No profiles found for {", ".join(t["handle"] for t in targets)} on {sites_per_username} sites. '
-                        f'The handle may be spelled differently there, or the person does not use it publicly. '
-                        f'Try more sites or the "confident and possible" setting.')
+                        f'The handle may be spelled differently there, or the person does not use it publicly. {widen}').strip()
+        elif totals['profiles'] == 0 and timed_out:
+            headline = (f'Time limit of {user_limit} s reached before {", ".join(timed_out)} finished on '
+                        f'{sites_per_username} sites, so there is nothing to show. A full scan of all sites needs '
+                        f'about 3 minutes per username: raise the time limit or lower "How many sites to check".')
         elif totals['profiles'] == 0:
             headline = (f'No results. {tool_errors} of {len(targets)} username(s) could not be scanned; '
                         f'see the notes and run again.')
         else:
             who = checked[0]['username'] if len(checked) == 1 else f'{len(checked)} usernames'
             headline = (f'Found {totals["profiles"]} profiles for {who} across {sites_per_username} sites: '
-                        f'{totals["high"]} high, {totals["medium"]} medium, {totals["low"]} low confidence. Strongest first.')
+                        f'{totals["high"]} high, {totals["medium"]} medium, {totals["low"]} low confidence. Strongest first. '
+                        f'{totals["unknown"]} sites had no profile with this handle, {totals["failed"]} did not answer.')
         if notes:
             headline += ' ' + ' '.join(notes)
 
@@ -578,8 +622,8 @@ async def main() -> None:
             'highConfidence': totals['high'],
             'mediumConfidence': totals['medium'],
             'lowConfidence': totals['low'],
+            'sitesNotFound': totals['unknown'],
             'sitesFailed': totals['failed'],
-            'sitesUnclear': totals['unknown'],
             'durationSeconds': duration,
             'perUsername': per_username,
             'notes': notes,

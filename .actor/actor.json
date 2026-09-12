@@ -2,7 +2,7 @@
     "actorSpecification": 1,
     "name": "social-analyzer",
     "title": "Social Analyzer - Find Social Profiles by Username",
-    "description": "Find someone's public profiles from a username, or a list of them, across 900+ sites. Paste a handle, an @handle or a profile link. Filter by site category, country or named sites. Every hit is ranked high, medium or low confidence. No login, no cookies, no API key.",
+    "description": "Find someone's public profiles from a username, or a list of them, across all 999 sites the scanner knows, every run. Paste a handle, an @handle or a profile link. Filter by category, country or named sites. Every hit ranked high, medium or low confidence with page details. No login, no API key.",
     "version": "1.0",
     "buildTag": "latest",
     "categories": [
@@ -22,7 +22,7 @@
             "views": {
                 "profiles": {
                     "title": "Profiles found",
-                    "description": "Every profile that matched, strongest first. Confidence: high means the site clearly recognised the handle, medium is likely, low is a guess worth a manual check.",
+                    "description": "Every profile that matched, strongest first. Confidence: high = the site answered exactly as a real profile does (100% match), medium = 50 to 99% and worth a manual look, low = a weak guess (only with the 'everything' setting).",
                     "transformation": {
                         "fields": [
                             "username",
@@ -33,6 +33,7 @@
                             "category",
                             "country",
                             "adultSite",
+                            "language",
                             "pageTitle"
                         ],
                         "flatten": []
@@ -75,6 +76,10 @@
                             "adultSite": {
                                 "label": "Adult site",
                                 "format": "boolean"
+                            },
+                            "language": {
+                                "label": "Page language",
+                                "format": "text"
                             }
                         }
                     }
@@ -91,6 +96,7 @@
                             "highConfidence",
                             "mediumConfidence",
                             "lowConfidence",
+                            "sitesNotFound",
                             "sitesFailed",
                             "durationSeconds",
                             "message"
@@ -128,7 +134,7 @@
                                 "format": "number"
                             },
                             "sitesFailed": {
-                                "label": "Sites unreachable",
+                                "label": "Did not answer",
                                 "format": "number"
                             },
                             "durationSeconds": {
@@ -138,6 +144,10 @@
                             "message": {
                                 "label": "What happened",
                                 "format": "text"
+                            },
+                            "sitesNotFound": {
+                                "label": "No profile",
+                                "format": "number"
                             }
                         }
                     }

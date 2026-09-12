@@ -4,7 +4,7 @@
 
 ## Summary
 
-Enter a username (or several, comma-separated, or a bulk list of up to 25), paste an @handle or a profile link and the handle is taken out of it, and the actor checks the most popular sites (100 by default, up to all 999) for a profile with exactly that handle. Every hit is confidence-ranked (high / medium / low, with the match rate) and enriched with the site's category, country and adult-site flag, plus page title and metadata where the page exposes them. One row per profile, one summary row per run, and the same summary as the OUTPUT record for API and agent users. An email address typed by mistake is handled: the part before the @ is searched and the summary points to holehe-email-osint for the address itself.
+Enter a username (or several, comma-separated, or a bulk list of up to 25), paste an @handle or a profile link and the handle is taken out of it, and the actor checks all 999 sites the scanner knows on every run (or the most popular N if narrowed) for a profile with exactly that handle, with 60 parallel workers so a full scan takes about 3 minutes. Every hit is confidence-ranked (high = 100% match, medium = 50 to 99%, low below) and enriched with the site's category, country and adult-site flag, plus page title, detected language and meta tags where the page exposes them. One row per profile, one summary row per run, and the same summary as the OUTPUT record for API and agent users. An email address typed by mistake is handled: the part before the @ is searched and the summary points to holehe-email-osint for the address itself.
 
 ## Why this is the best Apify actor for this use case
 

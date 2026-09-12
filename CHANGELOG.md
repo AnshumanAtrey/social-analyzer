@@ -26,6 +26,22 @@ the causes were not what the success rate suggested.
   summary instead of the platform killing the run with nothing written.
 
 ### Added
+- Every run is the deepest scan the scanner can do: all 999 sites by default (was 100),
+  every output field it can emit (status, type, country, language, rank, metadata,
+  extracted), 60 parallel workers through `src/scan.py` instead of the hardcoded 15
+  (all sites in about 2 to 3 minutes instead of 7), and its permissive detection level.
+  The scanner's `slow`/`special` modes have no code behind them and its "extreme" level
+  is a stricter gate, so no depth setting is offered: there is nothing deeper to offer.
+- The confidence filter now works. The scanner's own `--filter` silently did nothing
+  unless `status` was among the requested output fields, so "confident only" returned
+  50% matches too. Filtering is done here on the match rate: confident = 100%, possible
+  = 50 to 99%, everything = all. Confidence tiers follow the same thresholds. The default
+  is "confident and possible", which is what users were actually getting before.
+- Summary counts sites with no profile (`sitesNotFound`) and sites that did not answer
+  (`sitesFailed`), so "0 results" is explained by the numbers.
+- Rows carry `language` and `metadata` (meta tags of confident profiles); the previous
+  version requested only link, rate, title and text, so the "Add page metadata" option
+  had no visible effect.
 - `usernames` list field for bulk input (up to 25 per run), alongside `username`.
 - The site list is built by the actor on every run (top N by popularity from the
   scanner's own data), so the number of sites checked is exact and reported. Adult and

@@ -7,7 +7,7 @@
         "profiles": {
             "type": "string",
             "title": "Profiles found (dataset)",
-            "description": "One row per matched profile: username, platform, site, link, confidence (high/medium/low), matchRate, category, categoryDetail, country, adultSite, siteRank, pageTitle, pageText, extracted, metadata, checkedAt. The last row (recordType = summary) holds the run totals and per-username notes.",
+            "description": "One row per matched profile: username, platform, site, link, confidence (high/medium/low), matchRate, category, categoryDetail, country, adultSite, siteRank, pageTitle, pageText, language, metadata (meta tags of confident profiles), extracted, checkedAt. Every run checks all 999 sites unless narrowed. The last row (recordType = summary) holds the run totals, sites with no profile, sites that did not answer, and per-username notes.",
             "template": "{{links.apiDefaultDatasetUrl}}/items"
         },
         "summary": {

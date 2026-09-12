@@ -1,6 +1,6 @@
 {
   "title": "Find social media profiles by username",
-  "description": "Type one username, or several, and get every public profile that uses it across 900+ sites, ranked by how sure we are. Only the username is needed. Everything else narrows the search.",
+  "description": "Type one username, or several, and get every public profile that uses it across 950+ sites, ranked by how sure we are. Adult and dating sites are never checked. Only the username is needed; everything else narrows the search.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -28,7 +28,7 @@
     "top": {
       "title": "How many sites to check",
       "type": "integer",
-      "description": "The most popular N sites from the list of 999. 100 sites take about 30 to 40 seconds per username, 300 about 2 minutes, all 999 about 7 minutes.",
+      "description": "The most popular N sites from the list of 951 (adult and dating sites excluded). 100 sites take about 30 to 40 seconds per username, 300 about 2 minutes, all of them about 7 minutes.",
       "default": 100,
       "prefill": 100,
       "minimum": 10,
@@ -40,7 +40,7 @@
     "websites": {
       "title": "Only these sites",
       "type": "array",
-      "description": "Check only the sites you name, by domain: github.com, reddit.com, instagram.com. A partial name like github also works. Any of the 999 sites in the list is accepted; the run tells you if a name is not on it. When set, 'How many sites to check' is ignored.",
+      "description": "Check only the sites you name, by domain: github.com, reddit.com, instagram.com. A partial name like github also works. Any of the 951 sites in the list is accepted; the run tells you if a name is not on it. When set, 'How many sites to check' is ignored.",
       "editor": "stringList",
       "example": [
         "github.com",
@@ -52,13 +52,12 @@
     "siteType": {
       "title": "Only this category",
       "type": "string",
-      "description": "Restrict the search to one kind of site. The counts show how many sites are in each category. Combine with 'How many sites to check' to take the most popular ones in that category.",
+      "description": "Restrict the search to one kind of site. The counts show how many sites are in each category. Adult and dating sites are never checked. Combine with 'How many sites to check' to take the most popular ones in that category.",
       "default": "",
       "editor": "select",
       "enum": [
         "",
         "social",
-        "adult_dating",
         "gaming",
         "developer_tech",
         "forums",
@@ -72,9 +71,8 @@
         "other"
       ],
       "enumTitles": [
-        "Any category (999 sites)",
+        "Any category (951 sites)",
         "Social networks and communities (31 sites)",
-        "Adult and dating sites (48 sites)",
         "Gaming (82 sites)",
         "Developer and tech (169 sites)",
         "Forums (44 sites)",
@@ -148,13 +146,6 @@
       },
       "uniqueItems": true,
       "nullable": true
-    },
-    "excludeAdult": {
-      "title": "Skip adult and dating sites",
-      "type": "boolean",
-      "description": "Leave out the 48 adult and dating sites. Useful for hiring, brand or family checks where those results are not wanted.",
-      "default": false,
-      "editor": "checkbox"
     },
     "filter": {
       "title": "Which matches to keep",

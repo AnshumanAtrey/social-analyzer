@@ -2,7 +2,7 @@
     "actorSpecification": 1,
     "name": "social-analyzer",
     "title": "Social Analyzer - Find Social Profiles by Username",
-    "description": "Find someone's public profiles from a username, or a list of them, across 900+ sites. Paste a handle, an @handle or a profile link. Filter by site category, country or named sites. Every hit is ranked high, medium or low confidence. No login, no cookies, no API key.",
+    "description": "Find someone's public profiles from a username, or a list of them, across 950+ sites. Paste a handle, an @handle or a profile link. Filter by site category, country or named sites. Every hit is ranked high, medium or low confidence. Adult and dating sites are never checked. No login, no API key.",
     "version": "1.0",
     "buildTag": "latest",
     "categories": [
@@ -18,7 +18,7 @@
         "dataset": {
             "actorSpecification": 1,
             "title": "Social Analyzer results",
-            "description": "One row per profile found, plus one summary row per run (recordType = summary).",
+            "description": "One row per profile found, plus one summary row per run (recordType = summary). Adult and dating sites are never checked.",
             "views": {
                 "profiles": {
                     "title": "Profiles found",
@@ -32,7 +32,6 @@
                             "matchRate",
                             "category",
                             "country",
-                            "adultSite",
                             "pageTitle"
                         ],
                         "flatten": []
@@ -67,10 +66,6 @@
                             "country": {
                                 "label": "Site country",
                                 "format": "text"
-                            },
-                            "adultSite": {
-                                "label": "Adult site",
-                                "format": "boolean"
                             },
                             "pageTitle": {
                                 "label": "Page title",

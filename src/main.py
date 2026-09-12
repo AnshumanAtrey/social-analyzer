@@ -9,9 +9,11 @@ Wraps the qeeqbox/social-analyzer CLI in fast mode and adds what real user runs
 - Emails pasted into the username box. Three users did that in one week and got a
   failed run. We now search the part before the @ and point to holehe-email-osint
   for the address itself.
-- Site filters that work. The CLI's --type and --countries options select nothing
-  in version 0.45, so category, country, adult and named-site filters are applied
-  here from the tool's own sites.json and passed down as --websites.
+- Site selection done here, always. The CLI's --type and --countries options select
+  nothing in version 0.45, and its top-N list includes adult sites. So the site list
+  is built from the tool's own sites.json (category, country, named sites, top N by
+  popularity), adult and dating sites are always left out, and the exact site URLs
+  are passed down as --websites.
 - Rows enriched with the site's category, country and adult flag (the CLI returns
   only link, rate, title, text).
 - A status message that can never fail the run. SDK 3.x validates the run object
@@ -60,10 +62,10 @@ CATEGORY_RULES = [
     ('jobs_business', ('job', 'career', 'business', 'finance', 'marketing', 'investing', 'banking')),
     ('education', ('education', 'science', 'universit', 'librar', 'biology', 'physics', 'philosophy')),
 ]
+EXCLUDED_CATEGORY = 'adult_dating'   # never checked; 48 sites in the scanner's list
 CATEGORY_TITLES = {
     '': 'Any category',
     'social': 'Social networks and communities',
-    'adult_dating': 'Adult and dating sites',
     'gaming': 'Gaming',
     'developer_tech': 'Developer and tech',
     'forums': 'Forums',
@@ -140,7 +142,8 @@ def platform_name(host: str) -> str:
     known = {'github.com': 'GitHub', 'gitlab.com': 'GitLab', 'youtube.com': 'YouTube',
              'tiktok.com': 'TikTok', 'linkedin.com': 'LinkedIn', 'soundcloud.com': 'SoundCloud',
              'deviantart.com': 'DeviantArt', 'x.com': 'X (Twitter)', 'twitter.com': 'X (Twitter)',
-             'vk.com': 'VK', 'ok.ru': 'OK.ru', 'about.me': 'About.me', 'last.fm': 'Last.fm'}
+             'vk.com': 'VK', 'ok.ru': 'OK.ru', 'about.me': 'About.me', 'last.fm': 'Last.fm',
+             't.me': 'Telegram', 'telegram.org': 'Telegram', 'chess.com': 'Chess.com', '9gag.com': '9GAG'}
     if host in known:
         return known[host]
     parts = host.split('.')
@@ -253,40 +256,45 @@ def as_list(value) -> list[str]:
     return [str(v).strip() for v in value if str(v).strip()]
 
 
-def select_sites(inp: dict, sites: list[dict], top: int) -> tuple[list[str] | None, dict]:
-    """Apply the user's filters to the site list.
+def select_sites(inp: dict, sites: list[dict], top: int) -> tuple[list[dict] | None, dict]:
+    """Choose the sites to probe for every username.
 
-    Returns (hosts, info). hosts is None when no filter is set, meaning "let the tool
-    take its top N by popularity". Otherwise it is the ordered host list to probe.
+    Adult and dating sites are always left out. Then the user's filters apply
+    (named sites, one category, countries), then the most popular `top` sites by
+    global rank. Returns (selected sites, info). None means the site list was not
+    available and the scanner's own top N has to be used (adult sites included).
     """
     wanted_sites = [w.lower().removeprefix('https://').removeprefix('http://').removeprefix('www.').strip('/')
                     for w in as_list(inp.get('websites'))]
     category = (inp.get('siteType') or inp.get('siteCategory') or '').strip()
     category = CATEGORY_ALIASES.get(category.lower(), category)
     countries = [COUNTRY_ALIASES.get(c.lower(), c) for c in as_list(inp.get('countries'))]
-    exclude_adult = bool(inp.get('excludeAdult', False))
 
-    info = {'filters': {}, 'unknownSites': [], 'suggestions': {}, 'sitesMatched': None}
+    info = {'filters': {}, 'unknownSites': [], 'adultSitesNamed': [], 'suggestions': {}, 'sitesMatched': None, 'adultExcluded': 0}
     if wanted_sites:
         info['filters']['websites'] = wanted_sites
     if category:
         info['filters']['category'] = category
     if countries:
         info['filters']['countries'] = countries
-    if exclude_adult:
-        info['filters']['excludeAdult'] = True
-    if not info['filters']:
-        return None, info
     if not sites:
-        info['error'] = 'site list unavailable, filters could not be applied'
+        info['error'] = 'site list unavailable; the scanner picked its own top sites and adult sites could not be excluded'
         return None, info
+    if category == EXCLUDED_CATEGORY:
+        info['adultRequested'] = True
+        return [], info
 
-    chosen = sites
+    chosen = [s for s in sites if s['category'] != EXCLUDED_CATEGORY]
+    info['adultExcluded'] = len(sites) - len(chosen)
     if wanted_sites:
-        chosen, hosts = [], {s['host'] for s in sites}
+        pool, chosen = chosen, []
+        hosts = {s['host'] for s in pool}
         for w in wanted_sites:
-            hits = [s for s in sites if w == s['host'] or w in s['host'] or s['host'] in w]
+            hits = [s for s in pool if w == s['host'] or w in s['host'] or s['host'] in w]
             if not hits:
+                if any(w == s['host'] or w in s['host'] for s in sites if s['category'] == EXCLUDED_CATEGORY):
+                    info['adultSitesNamed'].append(w)
+                    continue
                 info['unknownSites'].append(w)
                 close = difflib.get_close_matches(w, hosts, n=3, cutoff=0.6)
                 if close:
@@ -298,23 +306,24 @@ def select_sites(inp: dict, sites: list[dict], top: int) -> tuple[list[str] | No
         info['unknownCategory'] = category
     if countries:
         chosen = [s for s in chosen if s['country'] in countries]
-    if exclude_adult:
-        chosen = [s for s in chosen if s['category'] != 'adult_dating']
 
-    chosen = sorted({s['host']: s for s in chosen}.values(), key=lambda s: (s['rank'] is None, s['rank'] or 0))
+    chosen = sorted({s['url']: s for s in chosen}.values(), key=lambda s: (s['rank'] is None, s['rank'] or 0))
     if not wanted_sites:
         chosen = chosen[:top]
     info['sitesMatched'] = len(chosen)
-    return [s['host'] for s in chosen], info
+    return chosen, info
 
 
 # ------------------------------------------------------------------------- tool --
-def build_command(username: str, *, top: int, hosts: list[str] | None, confidence_filter: str,
+def build_command(username: str, *, top: int, site_urls: list[str] | None, confidence_filter: str,
                   extract: bool, metadata: bool) -> list[str]:
+    """--websites gets the exact URL patterns from sites.json. The scanner matches
+    tokens as substrings of a site's URL, so a bare host like t.me would also select
+    about.me; the full pattern selects exactly one entry."""
     cmd = [TOOL, '--username', username, '--output', 'json', '--mode', 'fast',
            '--method', 'find', '--filter', confidence_filter, '--options', 'link,rate,title,text', '--trim']
-    if hosts:
-        cmd += ['--websites', ' '.join(hosts)]
+    if site_urls:
+        cmd += ['--websites', ' '.join(site_urls)]
     else:
         cmd += ['--top', str(top)]
     if extract:
@@ -378,7 +387,6 @@ def enrich(profile: dict, username: str, site_index: dict[str, dict], checked_at
         'category': site.get('category') or 'other',
         'categoryDetail': site.get('categoryDetail'),
         'country': site.get('country'),
-        'adultSite': bool(site.get('adult', False)),
         'siteRank': site.get('rank'),
         'pageTitle': profile.get('title'),
         'pageText': profile.get('text'),
@@ -454,23 +462,32 @@ async def main() -> None:
 
         sites = load_sites()
         site_index = {s['host']: s for s in sites}
-        hosts, selection = select_sites(inp, sites, top)
+        selected, selection = select_sites(inp, sites, top)
+        if selection.get('adultRequested'):
+            await Actor.fail(status_message=(
+                'Adult and dating sites are not checked by this actor. Pick another category, or leave '
+                'the category on Any.'))
+            return
+        site_urls = [s['url'] for s in selected] if selected is not None else None
         if selection.get('unknownSites'):
             for w in selection['unknownSites']:
                 sugg = selection['suggestions'].get(w)
                 notes.append(f'Site "{w}" is not in the list' + (f'; did you mean {", ".join(sugg)}?' if sugg else '.'))
+        if selection.get('adultSitesNamed'):
+            notes.append(f'{", ".join(selection["adultSitesNamed"])}: adult and dating sites are never checked by this actor, so these were left out.')
         if selection.get('unknownCategory'):
             notes.append(f'Category "{selection["unknownCategory"]}" is not known; '
                          f'valid values: {", ".join(k for k in CATEGORY_TITLES if k)}. No category filter applied.')
         if selection.get('error'):
             notes.append(selection['error'])
-        sites_per_username = selection['sitesMatched'] if hosts is not None else top
-        if hosts is not None and not hosts:
+        sites_per_username = selection['sitesMatched'] if selected is not None else top
+        if selected is not None and not selected:
             await Actor.fail(status_message=(
                 'Your filters match no sites. ' + ' '.join(notes) if notes else
                 'Your site, category or country filters match no sites in the list. Loosen a filter and run again.'))
             return
-        Actor.log.info(f'{len(targets)} username(s), {sites_per_username} site(s) each, filters={selection["filters"] or "none"}')
+        Actor.log.info(f'{len(targets)} username(s), {sites_per_username} site(s) each, filters={selection["filters"] or "none"}, '
+                       f'{selection.get("adultExcluded", 0)} adult/dating sites left out')
 
         # Time budget: the user's limit, capped so the summary is written before the
         # platform kills the run. The CLI has no partial output, so an unfinished
@@ -493,7 +510,7 @@ async def main() -> None:
             if remaining < MIN_SECONDS_PER_USERNAME:
                 skipped_for_time.append(username)
                 continue
-            cmd = build_command(username, top=top, hosts=hosts, confidence_filter=confidence_filter,
+            cmd = build_command(username, top=top, site_urls=site_urls, confidence_filter=confidence_filter,
                                 extract=extract, metadata=metadata)
             Actor.log.info(f'[{i}/{len(targets)}] {username}: checking {sites_per_username} sites')
             t0 = time.monotonic()
@@ -571,6 +588,7 @@ async def main() -> None:
             'usernamesChecked': len(checked),
             'sitesPerUsername': sites_per_username,
             'filters': selection['filters'],
+            'adultSitesExcluded': selection.get('adultExcluded', 0),
             'confidenceFilter': confidence_filter,
             'profilesFound': totals['profiles'],
             'highConfidence': totals['high'],

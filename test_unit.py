@@ -105,50 +105,61 @@ assert category_of('Community and Society > Romance and Relationships', False) =
 assert category_of('Arts and Entertainment > Visual Arts and Design', False) == 'photo_design'
 assert category_of('Games > Video Games Consoles and Accessories', False) == 'gaming'
 assert category_of('', False) == 'other' and category_of('Internet', False) == 'other'
-assert set(CATEGORY_TITLES) >= {'social', 'adult_dating', 'gaming', 'developer_tech', 'other'}
+assert set(CATEGORY_TITLES) >= {'social', 'gaming', 'developer_tech', 'other'} and 'adult_dating' not in CATEGORY_TITLES
+assert platform_name('t.me') == 'Telegram'
 ok('site model: hosts, platform names and category rules')
 
 # 4. select_sites ---------------------------------------------------------------
 SITES = [
     {'host': 'github.com', 'url': 'https://github.com/{username}', 'category': 'developer_tech', 'categoryDetail': 'Programming', 'country': 'United States', 'adult': False, 'rank': 50},
     {'host': 'reddit.com', 'url': 'https://reddit.com/user/{username}', 'category': 'social', 'categoryDetail': 'Social Networks', 'country': 'United States', 'adult': False, 'rank': 20},
-    {'host': 'fancentro.com', 'url': 'https://fancentro.com/{username}', 'category': 'adult_dating', 'categoryDetail': 'Adult', 'country': 'United States', 'adult': True, 'rank': 9000},
+    {'host': 'fancentro.com', 'url': 'https://fancentro.com/{username}', 'category': 'adult_dating', 'categoryDetail': 'Adult', 'country': 'United States', 'adult': True, 'rank': 9},
     {'host': 'blog.naver.com', 'url': 'https://blog.naver.com/{username}', 'category': 'other', 'categoryDetail': 'Internet', 'country': 'South Korea', 'adult': False, 'rank': 30},
     {'host': 'noranksite.org', 'url': 'https://noranksite.org/{username}', 'category': 'forums', 'categoryDetail': 'Forums', 'country': None, 'adult': False, 'rank': None},
 ]
-hosts, info = select_sites({}, SITES, 100)
-assert hosts is None and info['filters'] == {}
-ok('select_sites: no filters -> let the tool pick its top N')
+urls = lambda sel: [x['url'] for x in sel]
+sel, info = select_sites({}, SITES, 100)
+assert urls(sel) == ['https://reddit.com/user/{username}', 'https://blog.naver.com/{username}', 'https://github.com/{username}', 'https://noranksite.org/{username}'], urls(sel)
+assert info['adultExcluded'] == 1 and info['filters'] == {}
+ok('select_sites: no filters -> every non-adult site by popularity; the adult site (rank 9) is never in the list')
 
-hosts, info = select_sites({'websites': ['github', 'https://www.reddit.com/', 'myspace.com']}, SITES, 100)
-assert hosts == ['reddit.com', 'github.com'], hosts
-assert info['unknownSites'] == ['myspace.com'], info
-ok('select_sites: named sites resolve by partial or full domain; unknown ones are reported')
+sel, info = select_sites({}, SITES, 2)
+assert urls(sel) == ['https://reddit.com/user/{username}', 'https://blog.naver.com/{username}']
+ok('select_sites: top N applies after adult sites are removed')
 
-hosts, info = select_sites({'siteType': 'Dating', 'top': 900}, SITES, 900)
-assert hosts == ['fancentro.com'] and info['filters']['category'] == 'adult_dating', (hosts, info)
-ok("select_sites: legacy 'Dating' value maps to the adult_dating category")
+sel, info = select_sites({'websites': ['github', 'https://www.reddit.com/', 'myspace.com', 'fancentro']}, SITES, 100)
+assert urls(sel) == ['https://reddit.com/user/{username}', 'https://github.com/{username}'], urls(sel)
+assert info['unknownSites'] == ['myspace.com'] and info['adultSitesNamed'] == ['fancentro'], info
+ok('select_sites: named sites resolve by partial or full domain; unknown names are reported, adult names are named as excluded')
 
-hosts, info = select_sites({'countries': ['kr', 'United States'], 'excludeAdult': True}, SITES, 2)
-assert hosts == ['reddit.com', 'blog.naver.com'], hosts
-ok('select_sites: country codes and names, adult excluded, top N by popularity')
+sel, info = select_sites({'siteType': 'Dating', 'top': 900}, SITES, 900)
+assert sel == [] and info.get('adultRequested') is True
+ok("select_sites: legacy 'Dating' asks for the excluded category -> empty selection flagged adultRequested")
 
-hosts, info = select_sites({'siteType': 'nonsense'}, SITES, 100)
-assert info.get('unknownCategory') == 'nonsense' and len(hosts) == 5
+sel, info = select_sites({'countries': ['kr', 'United States']}, SITES, 2)
+assert urls(sel) == ['https://reddit.com/user/{username}', 'https://blog.naver.com/{username}'], urls(sel)
+ok('select_sites: country codes and names, top N by popularity')
+
+sel, info = select_sites({'siteType': 'nonsense'}, SITES, 100)
+assert info.get('unknownCategory') == 'nonsense' and len(sel) == 4
 ok('select_sites: unknown category is reported and ignored instead of matching nothing')
 
-hosts, info = select_sites({'countries': ['Mars']}, SITES, 100)
-assert hosts == [] and info['sitesMatched'] == 0
+sel, info = select_sites({'countries': ['Mars']}, SITES, 100)
+assert sel == [] and info['sitesMatched'] == 0
 ok('select_sites: filters that match nothing return an empty list (the run explains and stops)')
 
+sel, info = select_sites({}, [], 100)
+assert sel is None and 'unavailable' in info['error']
+ok('select_sites: without sites.json the scanner falls back to its own top N and the run says adult sites could not be excluded')
+
 # 5. build_command --------------------------------------------------------------
-cmd = build_command('elonmusk', top=100, hosts=None, confidence_filter='good', extract=False, metadata=True)
+cmd = build_command('elonmusk', top=100, site_urls=None, confidence_filter='good', extract=False, metadata=True)
 assert cmd[:3] == ['social-analyzer', '--username', 'elonmusk'] and '--top' in cmd and '100' in cmd
 assert '--mode' in cmd and cmd[cmd.index('--mode') + 1] == 'fast' and '--metadata' in cmd and '--extract' not in cmd
-cmd = build_command('x', top=100, hosts=['github.com', 'reddit.com'], confidence_filter='good,maybe', extract=True, metadata=False)
-assert '--websites' in cmd and cmd[cmd.index('--websites') + 1] == 'github.com reddit.com' and '--top' not in cmd
+cmd = build_command('x', top=100, site_urls=['https://github.com/{username}', 'https://reddit.com/user/{username}'], confidence_filter='good,maybe', extract=True, metadata=False)
+assert '--websites' in cmd and cmd[cmd.index('--websites') + 1] == 'https://github.com/{username} https://reddit.com/user/{username}' and '--top' not in cmd
 assert cmd[cmd.index('--filter') + 1] == 'good,maybe' and '--extract' in cmd and '--metadata' not in cmd
-ok('build_command: top vs named sites, filters and flags wired; always fast mode')
+ok('build_command: top vs exact site URLs, filters and flags wired; always fast mode')
 
 # 6. parse_output ---------------------------------------------------------------
 assert parse_output('{"detected":[{"link":"https://x.com/a","rate":"%100.0"}]}')['detected'][0]['link'] == 'https://x.com/a'
@@ -164,10 +175,10 @@ assert parse_rate('%66.6') == 66.6
 index = {s['host']: s for s in SITES}
 row = enrich({'link': 'https://github.com/torvalds', 'rate': '%100.0', 'title': 'torvalds (Linus Torvalds)', 'text': 'Linus'}, 'torvalds', index, '2026-09-12T00:00:00Z')
 assert row['platform'] == 'GitHub' and row['site'] == 'github.com' and row['confidence'] == 'high' and row['matchRate'] == 100.0
-assert row['category'] == 'developer_tech' and row['country'] == 'United States' and row['adultSite'] is False and row['siteRank'] == 50
+assert row['category'] == 'developer_tech' and row['country'] == 'United States' and 'adultSite' not in row and row['siteRank'] == 50
 row = enrich({'link': 'https://unknown.example/u', 'rate': '%25.0'}, 'u', index, 'now')
 assert row['category'] == 'other' and row['country'] is None and row['confidence'] == 'low'
-ok('enrich: rows carry platform, site, confidence, category, country, adult flag, rank')
+ok('enrich: rows carry platform, site, confidence, category, country, rank')
 
 # 8. safe_status never raises ---------------------------------------------------------
 asyncio.run(safe_status('Found 202 profiles'))
@@ -180,7 +191,7 @@ ok('summary row shape is serialisable')
 
 # 10. real scan (optional) -------------------------------------------------------------
 if shutil.which('social-analyzer'):
-    cmd = build_command('torvalds', top=100, hosts=['github.com', 'reddit.com'], confidence_filter='good', extract=False, metadata=False)
+    cmd = build_command('torvalds', top=100, site_urls=['https://github.com/{username}', 'https://reddit.com/user/{username}'], confidence_filter='good', extract=False, metadata=False)
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     parsed = parse_output(proc.stdout)
     links = [p['link'] for p in parsed.get('detected', [])]

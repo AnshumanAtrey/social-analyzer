@@ -17,9 +17,9 @@ the causes were not what the success rate suggested.
   no longer an error: the part before the @ is searched and the summary points to
   holehe-email-osint for the address itself.
 - Category and country filters work again. The scanner's own `--type` and `--countries`
-  options select zero sites in version 0.45, so the filters are applied here from the
-  scanner's sites.json and passed down as `--websites`. The "Dating" filter a user tried
-  now checks 48 adult and dating sites instead of none.
+  options select zero sites in version 0.45, so the site list is built here from the
+  scanner's sites.json on every run and passed down as `--websites` with exact URL
+  patterns (a bare host token would over-match: `t.me` also selects `about.me`).
 - `slow` and `special` scan modes removed from the form: both return no data in the current
   scanner. A legacy `mode` value in API input is accepted and noted, and the fast scan runs.
 - Time limit is respected: usernames that cannot start before the limit are listed in the
@@ -27,10 +27,12 @@ the causes were not what the success rate suggested.
 
 ### Added
 - `usernames` list field for bulk input (up to 25 per run), alongside `username`.
-- `excludeAdult` checkbox (48 sites) for hiring, brand and family checks.
+- Adult and dating sites (48 in the scanner's list) are never checked, on every run,
+  including the scanner's own top-N list which used to include them. Asking for that
+  category stops the run with a clear message and costs nothing.
 - Every profile row carries `platform`, `site`, `category`, `categoryDetail`, `country`,
-  `adultSite`, `siteRank`, `matchRate` and `pageTitle`; the scanner itself only returns
-  link, rate, title and text.
+  `siteRank`, `matchRate` and `pageTitle`; the scanner itself only returns link, rate,
+  title and text.
 - One summary row per run with per-username results, the filters applied, notes about
   cleaned or skipped input, and the plain-language message also shown as the run status.
   The same object is saved as the `OUTPUT` record for API and agent users.
@@ -43,8 +45,7 @@ the causes were not what the success rate suggested.
 ### Changed
 - Input form regrouped into "Who to look up", "Where to look", "Results", "Limits"; every
   title and description rewritten in plain words with the technical detail second.
-- Dataset views show platform, profile URL, confidence, match %, category, site country and
-  adult flag; the always-empty status, language and rank columns are gone.
+- Dataset views show platform, profile URL, confidence, match %, category and site country; the always-empty status, language and rank columns are gone.
 - `trim` is always on and no longer a field; `method` is no longer a field (found profiles
   are always what is returned).
 - `siteType` values are now category slugs and `countries` values are country names, both

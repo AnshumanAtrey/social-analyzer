@@ -7,7 +7,7 @@
         "profiles": {
             "type": "string",
             "title": "Profiles found (dataset)",
-            "description": "One row per matched profile: username, platform, site, link, confidence (high/medium/low), matchRate, category, categoryDetail, country, adultSite, siteRank, pageTitle, pageText, extracted, metadata, checkedAt. The last row (recordType = summary) holds the run totals and per-username notes.",
+            "description": "One row per matched profile: username, platform, site, link, confidence (high/medium/low), matchRate, category, categoryDetail, country, siteRank, pageTitle, pageText, extracted, metadata, checkedAt. Adult and dating sites are never checked. The last row (recordType = summary) holds the run totals and per-username notes.",
             "template": "{{links.apiDefaultDatasetUrl}}/items"
         },
         "summary": {

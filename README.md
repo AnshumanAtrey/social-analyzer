@@ -1,6 +1,6 @@
 # Social Analyzer - Find Social Profiles by Username
 
-Type a username and get every public profile that uses it, across 999 sites: social networks, gaming, dating, developer, forums and niche platforms. Every hit is ranked high, medium or low confidence, so real profiles come first and guesses stay marked. No login, no cookies, no API key.
+Type a username and get every public profile that uses it, across 951 sites: social networks, gaming, developer, forums, wikis and niche platforms. Every hit is ranked high, medium or low confidence, so real profiles come first and guesses stay marked. Adult and dating sites are never checked. No login, no cookies, no API key.
 
 Available as an [Apify Actor](https://apify.com/anshumanatrey/social-analyzer). $0.005 per profile found. One username on 100 sites takes about 40 seconds.
 
@@ -8,7 +8,7 @@ Available as an [Apify Actor](https://apify.com/anshumanatrey/social-analyzer). 
 
 ## What does it do?
 
-You give it one username, or a list. It checks the most popular sites (100 by default, up to all 999) for a profile with exactly that handle and returns one row per profile it finds: the platform, the profile URL, how confident the match is, the site's category and country, and the page title. A summary row and an `OUTPUT` record say in plain words what was checked and what came back.
+You give it one username, or a list. It checks the most popular sites (100 by default, up to all 951) for a profile with exactly that handle and returns one row per profile it finds: the platform, the profile URL, how confident the match is, the site's category and country, and the page title. A summary row and an `OUTPUT` record say in plain words what was checked and what came back.
 
 You can paste `@elonmusk` or a full profile link like `twitter.com/elonmusk`; the handle is taken out of it. If you paste an email address, the part before the `@` is searched and the run points you to the email tool for the address itself.
 
@@ -18,19 +18,19 @@ You can paste `@elonmusk` or a full profile link like `twitter.com/elonmusk`; th
 |---|---|---|
 | Setup | pip install, Python, terminal | Open the page, type a handle, press Start |
 | Input | One exact handle | Handles, @handles, profile links, lists of up to 25 |
-| Sites covered | About 300 | 999, checked in parallel |
+| Sites covered | About 300 | 951, checked in parallel; adult and dating sites left out |
 | Confidence | Found or not found | High, medium, low, with the match rate |
-| Filtering | None | Category, country, named sites, skip adult |
+| Filtering | None | Category, country, named sites |
 | Output | Terminal text | One row per profile with category and country, CSV or JSON |
 
-The scanner underneath is qeeqbox/social-analyzer (3,000+ GitHub stars). This actor fixes what its command line gets wrong in the current version: several usernames at once, category and country filters, and empty results in its slow and special modes.
+The scanner underneath is qeeqbox/social-analyzer (3,000+ GitHub stars). This actor chooses the sites itself from the scanner's own list and fixes what its command line gets wrong in the current version: several usernames at once, category and country filters, and empty results in its slow and special modes.
 
 ## When should I use it?
 
-- Recruiting and hiring: check a candidate's public presence from one handle, with adult sites skipped
+- Recruiting and hiring: check a candidate's public presence from one handle; adult and dating sites are never part of the result
 - People search: find every account a person uses under a username
 - Fraud and trust teams: find a scammer's or seller's other profiles
-- Dating safety and self-checks: see what a handle exposes, including on dating and adult sites
+- Self-checks: see what your own handle exposes across the web
 - Investigations and due diligence: build a cross-platform footprint for a case
 
 ## What does it cost?
@@ -45,7 +45,7 @@ Typical runs:
 |---|---|
 | One username, 100 sites, 17 profiles found (a real run below) | $0.09 |
 | One username, 100 sites, 55 profiles found | $0.28 |
-| Two usernames on the 48 adult and dating sites, 16 profiles | $0.09 |
+| Two usernames on the 31 social-network sites, about 10 profiles | $0.06 |
 | 25 usernames, 100 sites each, about 30 profiles each | $3.76 |
 
 A run that finds nothing costs $0.005 for the summary row. Runs stopped by your own input (no username, filters that match no site) cost nothing.
@@ -56,17 +56,16 @@ A run that finds nothing costs $0.005 for the summary row. Runs stopped by your 
 |---|---|---|
 | `username` | one of the two | The handle. Paste `@handle` or a profile link; separate several with commas. |
 | `usernames` | one of the two | A list of handles, one per line, up to 25 per run. |
-| `top` | no | How many of the most popular sites to check. Default 100, maximum 999. |
-| `websites` | no | Only these sites, by domain or partial name: `github.com`, `reddit`. Any of the 999 sites. |
-| `siteType` | no | One category: social, adult_dating, gaming, developer_tech, forums, wikis_reference, entertainment, photo_design, news_blogs, shopping, jobs_business, education, other. |
+| `top` | no | How many of the most popular sites to check. Default 100, maximum 951. |
+| `websites` | no | Only these sites, by domain or partial name: `github.com`, `reddit`. Any of the 951 sites. |
+| `siteType` | no | One category: social, gaming, developer_tech, forums, wikis_reference, entertainment, photo_design, news_blogs, shopping, jobs_business, education, other. |
 | `countries` | no | Only sites based in these countries, by name (United States, India, Russia, Japan and 19 more). |
-| `excludeAdult` | no | Skip the 48 adult and dating sites. |
 | `filter` | no | `good` (confident only, default), `good,maybe` (add possible matches), `all`. |
 | `metadata` | no | Add page title, description, image and language. Default on. |
 | `extract` | no | Pull emails, links and patterns from found pages. Default off, slower. |
 | `timeout` | no | Time limit in seconds for the whole run. Default 1800. |
 
-Filters combine. With a category or country filter, `top` picks the most popular sites inside that filter. With `websites`, `top` is ignored.
+Filters combine. With a category or country filter, `top` picks the most popular sites inside that filter. With `websites`, `top` is ignored. Adult and dating sites are removed before any filter is applied.
 
 ## What does the output look like?
 
@@ -93,7 +92,6 @@ One profile row as JSON:
   "category": "developer_tech",
   "categoryDetail": "Computers Electronics and Technology > Programming and Developer Software",
   "country": "United States",
-  "adultSite": false,
   "siteRank": 89,
   "pageTitle": "torvalds (Linus Torvalds)",
   "checkedAt": "2026-09-12T14:20:11+00:00"
@@ -109,6 +107,7 @@ The summary row (also saved as the `OUTPUT` record) from the same email run:
   "usernamesChecked": 1,
   "sitesPerUsername": 50,
   "filters": {},
+  "adultSitesExcluded": 48,
   "profilesFound": 17,
   "highConfidence": 2,
   "mediumConfidence": 11,
@@ -120,7 +119,7 @@ The summary row (also saved as the `OUTPUT` record) from the same email run:
 }
 ```
 
-**Confidence.** High (75% and above) means the site clearly recognised the handle. Medium (50 to 74%) is likely but worth a look; many adult and dating sites answer at 50% for any handle. Low is a guess. Rows are sorted strongest first.
+**Confidence.** High (75% and above) means the site clearly recognised the handle. Medium (50 to 74%) is likely but worth a look; some sites answer with a normal page for any handle. Low is a guess. Rows are sorted strongest first.
 
 ## Common questions
 
@@ -134,11 +133,13 @@ The summary row (also saved as the `OUTPUT` record) from the same email run:
 
 **Q: Some results are wrong.** Sites that answer with a normal page for any handle produce medium matches. Stay on "Confident matches only" for clean lists, and check medium rows by hand.
 
+**Q: Why are there no dating or adult sites in my results?** They are never checked, by design. The scanner's list has 48 of them; this actor leaves all 48 out on every run, including when you name one directly.
+
 **Q: Where did slow and special modes go?** Both return no data in the current scanner, so they were removed. API calls that still send `mode` run the fast scan and the summary says so.
 
 **Q: How does this compare to Maigret?** Maigret covers more sites (3,000+) but is slower. This actor is the speed versus coverage middle ground with confidence ranking and filters.
 
-**Q: Site missing?** Any of the 999 sites in the scanner's list can be named directly. For a new site, open an issue or DM LinkedIn; additions ship within 1 to 2 hours.
+**Q: Site missing?** Any of the 951 sites in the scanner's list can be named directly. For a new site, open an issue or DM LinkedIn; additions ship within 1 to 2 hours.
 
 ---
 

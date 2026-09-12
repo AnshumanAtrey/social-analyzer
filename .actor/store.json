@@ -7,10 +7,10 @@
   },
   "actorPermissionLevel": "LIMITED_PERMISSIONS",
   "isPublic": true,
-  "defaultRunOptions$comment": "Full-depth default (all 999 sites, 60 scanner workers, two chunks in flight) took 125 s locally; 2 GB gives CPU headroom so the daily Store test stays under 5 minutes. Timeout 3600 matches the input's one-hour maximum; 25 usernames at full depth need about 75 minutes, so the form tells users to lower the site count for big lists.",
+  "defaultRunOptions$comment": "Full-depth default runs 8 scanner processes at once; on the platform they peaked at 2046 MB of a 2 GB run and two steps were OOM-killed (exit -9), losing 250 sites (build 1.0.8 test run, 2026-09-12: 175 s, 206 profiles vs 289 locally). 4 GB gives ~2 GB headroom and a full vCPU. Compute per full run at 4 GB is about 0.2 CU ($0.04) against ~200 charged rows ($0.80 developer share). Timeout 3600 matches the input's one-hour maximum.",
   "defaultRunOptions": {
     "build": "latest",
-    "memoryMbytes": 2048,
+    "memoryMbytes": 4096,
     "timeoutSecs": 3600
   },
   "pricing": {

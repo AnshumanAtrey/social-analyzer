@@ -610,6 +610,13 @@ async def main() -> None:
                     if remaining_now < 15:
                         return urls, None, 0.0
                     parsed, secs = await run_chunk(username, urls, remaining_now)
+                    # A step that comes back empty is usually a killed process (exit -9 when
+                    # memory ran out on the platform), not a scanner result. One retry.
+                    if parsed is not None and 'parse_error' in parsed and deadline - time.monotonic() > 30:
+                        Actor.log.warning(f'{username}: a step returned no data (exit {parsed.get("_exit")}); retrying it once')
+                        parsed2, secs2 = await run_chunk(username, urls, deadline - time.monotonic())
+                        if parsed2 is not None:
+                            parsed, secs = parsed2, secs + secs2
                     return urls, parsed, secs
 
             tasks = [asyncio.ensure_future(bounded(urls)) for urls in chunks]

@@ -15,7 +15,7 @@
   },
   "pricing": {
     "apply": true,
-    "$comment": "v1.1.0 moves charging from apify-default-dataset-item ($0.005 per row incl. the summary) to a custom 'profile' event at the same $0.005, charged per step as rows are delivered; the summary row becomes free. Adding an event is a model change the CI script will not automate: apply this record via API at deploy time (PUT pricingInfos, append), then the script sees a match. Event name must equal PROFILE_EVENT in src/main.py.",
+    "$comment": "v1.1.0 moves charging from apify-default-dataset-item ($0.005 per row incl. the summary) to a custom 'profile' event at the same $0.005, charged per step as rows are delivered; the summary row becomes free. Applied via API on 2026-09-12: the platform refused an immediate start (cannot-modify-actor-pricing-with-immediate-effect: a public Actor with users needs notice), so the record is scheduled to start 2026-09-26T22:14Z. Until then rows are still charged per dataset item by the platform and the code's 'profile' charges log a harmless unknown-event warning. The CI script will report the future record until it starts, then 'live prices match'. Event name must equal PROFILE_EVENT in src/main.py.",
     "pricingInfos": [
       {
         "pricingModel": "PAY_PER_EVENT",

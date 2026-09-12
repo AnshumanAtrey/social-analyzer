@@ -27,12 +27,13 @@ the causes were not what the success rate suggested.
 
 ### Added
 - `usernames` list field for bulk input (up to 25 per run), alongside `username`.
-- Adult and dating sites (48 in the scanner's list) are never checked, on every run,
-  including the scanner's own top-N list which used to include them. Asking for that
-  category stops the run with a clear message and costs nothing.
+- The site list is built by the actor on every run (top N by popularity from the
+  scanner's own data), so the number of sites checked is exact and reported. Adult and
+  dating sites (48) are part of every run, as they always were; the `adultSite` column
+  marks those rows and the "Adult and dating sites" category checks only them.
 - Every profile row carries `platform`, `site`, `category`, `categoryDetail`, `country`,
-  `siteRank`, `matchRate` and `pageTitle`; the scanner itself only returns link, rate,
-  title and text.
+  `adultSite`, `siteRank`, `matchRate` and `pageTitle`; the scanner itself only returns
+  link, rate, title and text.
 - One summary row per run with per-username results, the filters applied, notes about
   cleaned or skipped input, and the plain-language message also shown as the run status.
   The same object is saved as the `OUTPUT` record for API and agent users.
@@ -45,7 +46,8 @@ the causes were not what the success rate suggested.
 ### Changed
 - Input form regrouped into "Who to look up", "Where to look", "Results", "Limits"; every
   title and description rewritten in plain words with the technical detail second.
-- Dataset views show platform, profile URL, confidence, match %, category and site country; the always-empty status, language and rank columns are gone.
+- Dataset views show platform, profile URL, confidence, match %, category, site country and
+  adult flag; the always-empty status, language and rank columns are gone.
 - `trim` is always on and no longer a field; `method` is no longer a field (found profiles
   are always what is returned).
 - `siteType` values are now category slugs and `countries` values are country names, both

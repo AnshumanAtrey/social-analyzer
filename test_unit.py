@@ -105,7 +105,7 @@ assert category_of('Community and Society > Romance and Relationships', False) =
 assert category_of('Arts and Entertainment > Visual Arts and Design', False) == 'photo_design'
 assert category_of('Games > Video Games Consoles and Accessories', False) == 'gaming'
 assert category_of('', False) == 'other' and category_of('Internet', False) == 'other'
-assert set(CATEGORY_TITLES) >= {'social', 'gaming', 'developer_tech', 'other'} and 'adult_dating' not in CATEGORY_TITLES
+assert set(CATEGORY_TITLES) >= {'social', 'adult_dating', 'gaming', 'developer_tech', 'other'}
 assert platform_name('t.me') == 'Telegram'
 ok('site model: hosts, platform names and category rules')
 
@@ -119,29 +119,29 @@ SITES = [
 ]
 urls = lambda sel: [x['url'] for x in sel]
 sel, info = select_sites({}, SITES, 100)
-assert urls(sel) == ['https://reddit.com/user/{username}', 'https://blog.naver.com/{username}', 'https://github.com/{username}', 'https://noranksite.org/{username}'], urls(sel)
-assert info['adultExcluded'] == 1 and info['filters'] == {}
-ok('select_sites: no filters -> every non-adult site by popularity; the adult site (rank 9) is never in the list')
+assert urls(sel) == ['https://fancentro.com/{username}', 'https://reddit.com/user/{username}', 'https://blog.naver.com/{username}', 'https://github.com/{username}', 'https://noranksite.org/{username}'], urls(sel)
+assert info['filters'] == {}
+ok('select_sites: no filters -> every site by popularity, adult and dating sites included')
 
 sel, info = select_sites({}, SITES, 2)
-assert urls(sel) == ['https://reddit.com/user/{username}', 'https://blog.naver.com/{username}']
-ok('select_sites: top N applies after adult sites are removed')
+assert urls(sel) == ['https://fancentro.com/{username}', 'https://reddit.com/user/{username}']
+ok('select_sites: top N by rank')
 
 sel, info = select_sites({'websites': ['github', 'https://www.reddit.com/', 'myspace.com', 'fancentro']}, SITES, 100)
-assert urls(sel) == ['https://reddit.com/user/{username}', 'https://github.com/{username}'], urls(sel)
-assert info['unknownSites'] == ['myspace.com'] and info['adultSitesNamed'] == ['fancentro'], info
-ok('select_sites: named sites resolve by partial or full domain; unknown names are reported, adult names are named as excluded')
+assert urls(sel) == ['https://fancentro.com/{username}', 'https://reddit.com/user/{username}', 'https://github.com/{username}'], urls(sel)
+assert info['unknownSites'] == ['myspace.com'], info
+ok('select_sites: named sites resolve by partial or full domain; unknown ones are reported')
 
 sel, info = select_sites({'siteType': 'Dating', 'top': 900}, SITES, 900)
-assert sel == [] and info.get('adultRequested') is True
-ok("select_sites: legacy 'Dating' asks for the excluded category -> empty selection flagged adultRequested")
+assert urls(sel) == ['https://fancentro.com/{username}'] and info['filters']['category'] == 'adult_dating', (urls(sel), info)
+ok("select_sites: legacy 'Dating' value maps to the adult_dating category")
 
 sel, info = select_sites({'countries': ['kr', 'United States']}, SITES, 2)
-assert urls(sel) == ['https://reddit.com/user/{username}', 'https://blog.naver.com/{username}'], urls(sel)
+assert urls(sel) == ['https://fancentro.com/{username}', 'https://reddit.com/user/{username}'], urls(sel)
 ok('select_sites: country codes and names, top N by popularity')
 
 sel, info = select_sites({'siteType': 'nonsense'}, SITES, 100)
-assert info.get('unknownCategory') == 'nonsense' and len(sel) == 4
+assert info.get('unknownCategory') == 'nonsense' and len(sel) == 5
 ok('select_sites: unknown category is reported and ignored instead of matching nothing')
 
 sel, info = select_sites({'countries': ['Mars']}, SITES, 100)
@@ -150,7 +150,7 @@ ok('select_sites: filters that match nothing return an empty list (the run expla
 
 sel, info = select_sites({}, [], 100)
 assert sel is None and 'unavailable' in info['error']
-ok('select_sites: without sites.json the scanner falls back to its own top N and the run says adult sites could not be excluded')
+ok('select_sites: without sites.json the scanner falls back to its own top N')
 
 # 5. build_command --------------------------------------------------------------
 cmd = build_command('elonmusk', top=100, site_urls=None, confidence_filter='good', extract=False, metadata=True)
@@ -175,10 +175,10 @@ assert parse_rate('%66.6') == 66.6
 index = {s['host']: s for s in SITES}
 row = enrich({'link': 'https://github.com/torvalds', 'rate': '%100.0', 'title': 'torvalds (Linus Torvalds)', 'text': 'Linus'}, 'torvalds', index, '2026-09-12T00:00:00Z')
 assert row['platform'] == 'GitHub' and row['site'] == 'github.com' and row['confidence'] == 'high' and row['matchRate'] == 100.0
-assert row['category'] == 'developer_tech' and row['country'] == 'United States' and 'adultSite' not in row and row['siteRank'] == 50
+assert row['category'] == 'developer_tech' and row['country'] == 'United States' and row['adultSite'] is False and row['siteRank'] == 50
 row = enrich({'link': 'https://unknown.example/u', 'rate': '%25.0'}, 'u', index, 'now')
 assert row['category'] == 'other' and row['country'] is None and row['confidence'] == 'low'
-ok('enrich: rows carry platform, site, confidence, category, country, rank')
+ok('enrich: rows carry platform, site, confidence, category, country, adult flag, rank')
 
 # 8. safe_status never raises ---------------------------------------------------------
 asyncio.run(safe_status('Found 202 profiles'))

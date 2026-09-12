@@ -1,6 +1,6 @@
 {
   "title": "Find social media profiles by username",
-  "description": "Type one username, or several, and get every public profile that uses it. Every run checks all 999 sites the scanner knows and returns every detail it can read. Only the username is needed; the rest narrows the search.",
+  "description": "Type a username and press Start. With nothing else set, the scan is the widest possible: all 999 sites, worldwide, every category, every match kept and labelled by confidence, page details and patterns extracted. Every other field only narrows it.",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -11,7 +11,8 @@
       "editor": "textfield",
       "prefill": "elonmusk",
       "example": "elonmusk",
-      "sectionCaption": "Who to look up"
+      "sectionCaption": "Who to look up",
+      "sectionDescription": "Only this is needed. Leave the rest untouched for the deepest scan."
     },
     "usernames": {
       "title": "More usernames (bulk)",
@@ -35,7 +36,7 @@
       "maximum": 999,
       "editor": "number",
       "sectionCaption": "Where to look",
-      "sectionDescription": "Leave these empty to check the most popular sites. Set one or more to narrow the search; filters combine."
+      "sectionDescription": "Worldwide, all 999 sites and every category by default. Set something here only to narrow the search; filters combine."
     },
     "websites": {
       "title": "Only these sites",
@@ -52,7 +53,7 @@
     "siteType": {
       "title": "Only this category",
       "type": "string",
-      "description": "Restrict the search to one kind of site. The counts show how many sites are in each category. Combine with 'How many sites to check' to take the most popular ones in that category.",
+      "description": "Every category by default. Pick one to restrict the search to that kind of site; the counts show how many sites are in each. Combine with 'How many sites to check' to take the most popular ones in that category.",
       "default": "",
       "editor": "select",
       "enum": [
@@ -91,7 +92,7 @@
     "countries": {
       "title": "Only sites from these countries",
       "type": "array",
-      "description": "Where the site is based, not where the person lives. Most sites in the list are American or Indian; pick a country only when you know the person uses local platforms.",
+      "description": "Worldwide by default. Pick countries to check only sites based there (where the site is based, not where the person lives). Most sites in the list are American or Indian.",
       "editor": "select",
       "items": {
         "type": "string",
@@ -152,8 +153,8 @@
     "filter": {
       "title": "Which matches to keep",
       "type": "string",
-      "description": "How sure a match must be before it is reported. Confident = the site answered exactly as a real profile does (100% match). Possible = 50 to 99%, likely but worth a manual look; some sites answer with a normal page for any handle. The default keeps both; choose confident-only for the cleanest list, or everything to include weak guesses below 50%.",
-      "default": "good,maybe",
+      "description": "Which matches to report. Everything is the default: confident matches (100%, the site answered exactly as it does for a real profile), possible ones (50 to 99%, worth a manual look) and weak guesses (below 50%, marked low). Narrow it for a cleaner list.",
+      "default": "all",
       "editor": "select",
       "enum": [
         "good",
@@ -162,11 +163,11 @@
       ],
       "enumTitles": [
         "Confident matches only (100%)",
-        "Confident and possible matches (50% and up, recommended)",
-        "Everything, including weak guesses"
+        "Confident and possible matches (50% and up)",
+        "Everything, weak guesses included and marked low (default)"
       ],
       "sectionCaption": "Results",
-      "sectionDescription": "What each row should carry. Every found profile is one row, plus one summary row per run."
+      "sectionDescription": "Everything on by default. Each found profile is one row, plus one summary row per run."
     },
     "metadata": {
       "title": "Add page details (title, description, image, language)",
@@ -178,15 +179,15 @@
     "extract": {
       "title": "Pull out emails, links and other patterns",
       "type": "boolean",
-      "description": "Scans each found profile page for email addresses, links and similar patterns and adds them to the row. Slower, and most sites show none without login.",
-      "default": false,
+      "description": "Scans each found profile page for email addresses, links and similar patterns and adds them to the row. On by default; most sites show none without login, so the field is often empty.",
+      "default": true,
       "editor": "checkbox"
     },
     "timeout": {
       "title": "Time limit (seconds)",
       "type": "integer",
-      "description": "The whole run stops after this many seconds (maximum 3600). Usernames that could not start in time are listed in the summary instead of failing the run. One username on all 999 sites needs about 3 minutes.",
-      "default": 1800,
+      "description": "The whole run stops after this many seconds. Maximum and default 3600 (one hour). One username on all 999 sites needs about 3 minutes; 25 usernames need about 75, so for big lists lower 'How many sites to check'. Usernames that could not start in time are listed in the summary instead of failing the run.",
+      "default": 3600,
       "minimum": 60,
       "maximum": 3600,
       "editor": "number",

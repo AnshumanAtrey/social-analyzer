@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.main import (  # noqa: E402
     build_command, parse_output, parse_usernames, clean_handle, category_of, host_of,
     platform_name, select_sites, enrich, confidence_tier, parse_rate, safe_status,
-    keep_by_confidence, clean_value, CATEGORY_TITLES, MAX_USERNAMES, SCANNER_FIELDS,
+    keep_by_confidence, clean_value, resolve_settings, MAX_SETTINGS, CATEGORY_TITLES, MAX_USERNAMES, SCANNER_FIELDS,
 )
 
 passed = 0
@@ -190,6 +190,16 @@ ok('enrich: rows carry platform, site, confidence, category, country, adult flag
 # 8. safe_status never raises ---------------------------------------------------------
 asyncio.run(safe_status('Found 202 profiles'))
 ok('safe_status: a failing SDK status call is logged, not raised (the APIFY_AI crash)')
+
+# 8b. username only -> everything at maximum -----------------------------------------
+st = resolve_settings({'username': 'elonmusk'})
+assert st == {'top': 999, 'filter': 'all', 'extract': True, 'metadata': True, 'timeout': 3600}, st
+assert st == MAX_SETTINGS
+st = resolve_settings({'username': 'x', 'top': 100, 'filter': 'good', 'extract': False, 'metadata': False, 'timeout': 120})
+assert st == {'top': 100, 'filter': 'good', 'extract': False, 'metadata': False, 'timeout': 120}, st
+st = resolve_settings({'top': 0, 'filter': 'weird', 'timeout': 5, 'extract': 'yes'})
+assert st['top'] == 999 and st['filter'] == 'all' and st['timeout'] == 60 and st['extract'] is True, st
+ok('resolve_settings: a bare username gets all 999 sites, every match, extraction, metadata and an hour; explicit values win; junk falls back to max')
 
 # 9. summary invariants (documented shape) -------------------------------------------
 sample = json.loads(json.dumps({'recordType': 'summary', 'usernames': ['a'], 'profilesFound': 0, 'message': 'x', 'perUsername': []}))

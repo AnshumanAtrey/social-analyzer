@@ -8,7 +8,7 @@ Available as an [Apify Actor](https://apify.com/anshumanatrey/social-analyzer). 
 
 ## What does it do?
 
-You give it one username, or a list. It checks all 999 sites (or the most popular N, if you lower the count) for a profile with exactly that handle and returns one row per profile it finds: the platform, the profile URL, how confident the match is, the site's category and country, the page title, its language and its meta tags. A summary row and an `OUTPUT` record say in plain words what was checked, how many sites had no profile, how many did not answer, and what came back.
+You give it one username, or a list, and nothing else is needed: with only the username set, the scan is the widest possible, all 999 sites, worldwide, every category, every match kept and labelled by confidence, page details and patterns extracted, one hour to do it. It checks those sites for a profile with exactly that handle and returns one row per profile it finds: the platform, the profile URL, how confident the match is, the site's category and country, the page title, its language and its meta tags. A summary row and an `OUTPUT` record say in plain words what was checked, how many sites had no profile, how many did not answer, and what came back.
 
 You can paste `@elonmusk` or a full profile link like `twitter.com/elonmusk`; the handle is taken out of it. If you paste an email address, the part before the `@` is searched and the run points you to the email tool for the address itself.
 
@@ -43,7 +43,7 @@ Typical runs:
 
 | Job | Cost |
 |---|---|
-| One username, all 999 sites, 108 confident profiles (the prefill, a real run) | $0.55 |
+| One username, all 999 sites, everything kept: 108 confident plus possible and weak rows, about 150 rows (the prefill) | $0.75 |
 | One username, 100 most popular sites, 17 profiles found | $0.09 |
 | Two usernames on the 48 adult and dating sites, 16 profiles (a real run) | $0.09 |
 | 25 usernames, 100 sites each, about 30 profiles each | $3.76 |
@@ -58,12 +58,12 @@ A run that finds nothing costs $0.005 for the summary row. Runs stopped by your 
 | `usernames` | one of the two | A list of handles, one per line, up to 25 per run. |
 | `top` | no | How many of the most popular sites to check. Default and maximum 999 (all of them); lower it for a quicker run. |
 | `websites` | no | Only these sites, by domain or partial name: `github.com`, `reddit`. Any of the 999 sites. |
-| `siteType` | no | One category: social, adult_dating, gaming, developer_tech, forums, wikis_reference, entertainment, photo_design, news_blogs, shopping, jobs_business, education, other. |
-| `countries` | no | Only sites based in these countries, by name (United States, India, Russia, Japan and 19 more). |
-| `filter` | no | `good,maybe` (50% and up, default), `good` (100% matches only), `all` (everything). |
+| `siteType` | no | Every category by default. One category: social, adult_dating, gaming, developer_tech, forums, wikis_reference, entertainment, photo_design, news_blogs, shopping, jobs_business, education, other. |
+| `countries` | no | Worldwide by default. Only sites based in these countries, by name (United States, India, Russia, Japan and 19 more). |
+| `filter` | no | `all` (everything, marked by confidence, default), `good,maybe` (50% and up), `good` (100% matches only). |
 | `metadata` | no | Add each confident profile's meta tags and detected page language. Default on. |
-| `extract` | no | Pull emails, links and patterns from found pages. Default off, slower. |
-| `timeout` | no | Time limit in seconds for the whole run. Default 1800. |
+| `extract` | no | Pull emails, links and patterns from found pages. Default on. |
+| `timeout` | no | Time limit in seconds for the whole run. Default and maximum 3600. |
 
 Filters combine. With a category or country filter, `top` picks the most popular sites inside that filter. With `websites`, `top` is ignored.
 
@@ -124,7 +124,7 @@ The summary row (also saved as the `OUTPUT` record) from the same email run:
 }
 ```
 
-**Confidence.** High means a 100% match: the site answered exactly the way it does for a real profile. Medium (50 to 99%) is likely but worth a look; many adult and dating sites answer at 50% for any handle. Low is a guess. Rows are sorted strongest first. The default keeps high and medium; choose "Confident matches only" for a list of 100% matches.
+**Confidence.** High means a 100% match: the site answered exactly the way it does for a real profile. Medium (50 to 99%) is likely but worth a look; many adult and dating sites answer at 50% for any handle. Low is a guess. Rows are sorted strongest first. The default keeps everything, so a bare username misses nothing; choose "Confident and possible" or "Confident matches only" for a cleaner list.
 
 ## Common questions
 

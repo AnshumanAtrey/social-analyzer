@@ -36,7 +36,10 @@ the causes were not what the success rate suggested.
   unless `status` was among the requested output fields, so "confident only" returned
   50% matches too. Filtering is done here on the match rate: confident = 100%, possible
   = 50 to 99%, everything = all. Confidence tiers follow the same thresholds. The default
-  is "confident and possible", which is what users were actually getting before.
+  is "everything": a bare username must miss nothing, and every row is labelled.
+- A username with nothing else set gets every option at its maximum: all 999 sites,
+  worldwide, every category, every match, metadata and pattern extraction on, a one-hour
+  time limit. Every other field only narrows the scan.
 - Summary counts sites with no profile (`sitesNotFound`) and sites that did not answer
   (`sitesFailed`), so "0 results" is explained by the numbers.
 - Rows carry `language` and `metadata` (meta tags of confident profiles); the previous

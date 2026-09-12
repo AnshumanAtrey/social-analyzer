@@ -382,6 +382,24 @@ def confidence_tier(rate) -> str:
 
 MIN_RATE = {'good': 100.0, 'good,maybe': 50.0, 'all': 0.0}
 
+# A username with nothing else means the widest scan there is: every site, worldwide,
+# every category, every match kept and labelled, every detail extracted, an hour to do it.
+MAX_SETTINGS = {'top': 999, 'filter': 'all', 'extract': True, 'metadata': True, 'timeout': 3600}
+
+
+def resolve_settings(inp: dict) -> dict:
+    """Effective run settings: whatever the user set, everything else at maximum."""
+    top = inp.get('top')
+    conf = inp.get('filter')
+    timeout = inp.get('timeout')
+    return {
+        'top': max(10, min(int(top), 999)) if isinstance(top, (int, float)) and top else MAX_SETTINGS['top'],
+        'filter': conf if conf in MIN_RATE else MAX_SETTINGS['filter'],
+        'extract': bool(inp['extract']) if isinstance(inp.get('extract'), bool) else MAX_SETTINGS['extract'],
+        'metadata': bool(inp['metadata']) if isinstance(inp.get('metadata'), bool) else MAX_SETTINGS['metadata'],
+        'timeout': max(60, min(int(timeout), 3600)) if isinstance(timeout, (int, float)) and timeout else MAX_SETTINGS['timeout'],
+    }
+
 
 def keep_by_confidence(profiles: list[dict], confidence_filter: str) -> list[dict]:
     """Confident only = 100% match; confident and possible = 50% and up; all = everything."""
@@ -472,12 +490,9 @@ async def main() -> None:
                 'and we will ship a fixed build within hours.'))
             return
 
-        top = max(10, min(int(inp.get('top') or 999), 999))
-        confidence_filter = inp.get('filter') or 'good,maybe'
-        if confidence_filter not in ('good', 'good,maybe', 'all'):
-            confidence_filter = 'good,maybe'
-        extract = bool(inp.get('extract', False))
-        metadata = bool(inp.get('metadata', True))
+        settings = resolve_settings(inp)
+        top, confidence_filter = settings['top'], settings['filter']
+        extract, metadata = settings['extract'], settings['metadata']
 
         notes: list[str] = []
         legacy_mode = inp.get('mode')
@@ -515,7 +530,7 @@ async def main() -> None:
         # Time budget: the user's limit, capped so the summary is written before the
         # platform kills the run. The CLI has no partial output, so an unfinished
         # username yields nothing, which is why we refuse to start one we cannot finish.
-        user_limit = int(inp.get('timeout') or 1800)
+        user_limit = settings['timeout']
         platform_left = seconds_left_in_run()
         budget = user_limit if platform_left is None else min(user_limit, max(30, platform_left - RUN_SAFETY_MARGIN_S))
         deadline = time.monotonic() + budget
@@ -592,7 +607,8 @@ async def main() -> None:
 
         if totals['profiles'] == 0 and len(checked) == len(targets):
             widen = ('Try the "confident and possible" setting to see weaker matches.' if confidence_filter == 'good'
-                     else 'Try "everything" to see weak guesses too.' if confidence_filter == 'good,maybe' else '')
+                     else 'Try "everything" to see weak guesses too.' if confidence_filter == 'good,maybe'
+                     else 'Even weak guesses were included, so this handle is not in use on these sites.')
             headline = (f'No profiles found for {", ".join(t["handle"] for t in targets)} on {sites_per_username} sites. '
                         f'The handle may be spelled differently there, or the person does not use it publicly. {widen}').strip()
         elif totals['profiles'] == 0 and timed_out:
@@ -618,6 +634,7 @@ async def main() -> None:
             'sitesPerUsername': sites_per_username,
             'filters': selection['filters'],
             'confidenceFilter': confidence_filter,
+            'settings': settings,
             'profilesFound': totals['profiles'],
             'highConfidence': totals['high'],
             'mediumConfidence': totals['medium'],

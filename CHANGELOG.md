@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.0] - 2026-09-12 (local, not yet deployed)
+## [1.1.0] - 2026-09-13
 
 Driven by the Debugging data of the week of 2026-09-05: 11 of 45 user runs failed, and
 the causes were not what the success rate suggested.

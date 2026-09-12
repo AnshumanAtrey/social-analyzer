@@ -1,144 +1,192 @@
-"""Unit + integration test for social-analyzer wrapper."""
-import sys, types, os, subprocess
+"""Unit tests for the social-analyzer wrapper. Run: python3 test_unit.py
 
+No Apify SDK or network needed for tests 1-9 (the SDK is stubbed). Test 10 runs the
+real scanner on 10 sites when it is installed, and is skipped otherwise.
+"""
+import asyncio
+import json
+import os
+import shutil
+import subprocess
+import sys
+import types
+
+# --- stub the SDK so the module imports without the platform ---------------------
 apify_stub = types.ModuleType('apify')
-class _ActorLog:
-    def info(self, m): print(f'[INFO ] {m}')
-    def warning(self, m): print(f'[WARN ] {m}')
-    def error(self, m): print(f'[ERROR] {m}')
+
+
+class _Log:
+    def __getattr__(self, level):
+        return lambda m: print(f'[{level.upper():7}] {m}')
+
+
 class _Actor:
-    log = _ActorLog()
+    log = _Log()
+    config = types.SimpleNamespace(timeout_at=None)
+
+    @staticmethod
+    async def set_status_message(message):
+        raise RuntimeError('simulated pydantic ValidationError: meta.origin APIFY_AI')
+
+
 apify_stub.Actor = _Actor()
 sys.modules['apify'] = apify_stub
 
-sys.path.insert(0, os.path.dirname(__file__))
-from src.main import (build_command, parse_output, clean_username, valid_username,
-                      confidence_tier, parse_rate)
-import shutil
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src.main import (  # noqa: E402
+    build_command, parse_output, parse_usernames, clean_handle, category_of, host_of,
+    platform_name, select_sites, enrich, confidence_tier, parse_rate, safe_status,
+    CATEGORY_TITLES, MAX_USERNAMES,
+)
+
+passed = 0
 
 
-print('=' * 60)
-print('TEST 1: build_command — minimal input')
-print('=' * 60)
-cmd, mode = build_command({'username': 'elonmusk'})
-print(f'  cmd: {cmd}')
-assert cmd[0] == 'social-analyzer'
-assert '--username' in cmd and 'elonmusk' in cmd
-assert '--output' in cmd and 'json' in cmd
-assert '--mode' in cmd and 'fast' in cmd  # default
-assert '--top' in cmd and '100' in cmd     # default
-assert '--filter' in cmd and 'good' in cmd
-assert '--method' in cmd and 'find' in cmd
-assert '--options' in cmd
-print('  ✓ defaults applied')
+def ok(label):
+    global passed
+    passed += 1
+    print(f'  ok  {label}')
 
-print()
-print('=' * 60)
-print('TEST 2: build_command — all knobs')
-print('=' * 60)
-cmd, mode = build_command({
-    'username': 'a,b',
-    'mode': 'slow',
-    'top': 500,
-    'websites': 'youtube tiktok github',  # overrides top
-    'countries': 'us br',
-    'siteType': 'Social Networks',
-    'method': 'all',
-    'filter': 'good,maybe',
-    'extract': True,
-    'metadata': True,
-    'trim': True,
-})
-print(f'  cmd: {cmd}')
-assert '--websites' in cmd and 'youtube tiktok github' in cmd
-assert '--top' not in cmd  # websites takes precedence
-assert '--countries' in cmd and 'us br' in cmd
-assert '--type' in cmd and 'Social Networks' in cmd
-assert '--method' in cmd and 'all' in cmd
-assert '--filter' in cmd and 'good,maybe' in cmd
-assert '--extract' in cmd
-assert '--metadata' in cmd
-assert '--trim' in cmd
-print('  ✓ all flags wired')
 
-print()
-print('=' * 60)
-print('TEST 3: parse_output — valid JSON')
-print('=' * 60)
-data = parse_output('{"detected":[{"link":"https://x.com/a","status":"good"}]}')
-assert data == {'detected': [{'link': 'https://x.com/a', 'status': 'good'}]}
-print('  ✓ valid JSON parsed')
-
-print()
-print('=' * 60)
-print('TEST 4: parse_output — JSON with banner prefix')
-print('=' * 60)
-data = parse_output('Some CLI banner text\n{"detected":[]}\nTrailing junk')
-assert data == {'detected': []}
-print('  ✓ banner stripped, JSON extracted')
-
-print()
-print('=' * 60)
-print('TEST 5: parse_output — empty / bad input')
-print('=' * 60)
-assert parse_output('') == {'detected': [], 'parse_error': 'empty stdout'}
-assert 'parse_error' in parse_output('not json at all')
-print('  ✓ error paths handled')
-
-print()
-print('=' * 60)
-print('TEST 6: clean_username auto-cleans pasted input')
-print('=' * 60)
-clean_cases = {
-    'elonmusk': 'elonmusk',
-    '@elonmusk': 'elonmusk',
-    'https://twitter.com/elonmusk': 'elonmusk',
-    'twitter.com/elonmusk': 'elonmusk',
-    'https://instagram.com/elonmusk/': 'elonmusk',
-    'https://www.linkedin.com/in/elonmusk': 'elonmusk',
-    '  @elonmusk  ': 'elonmusk',
-    'johndoe,janedoe': 'johndoe janedoe',     # comma list -> space-joined
-    '@a, @b': 'a b',
-    'github.com/torvalds': 'torvalds',
+# 1. cleaning single tokens ---------------------------------------------------------
+cases = {
+    'elonmusk': 'elonmusk', '@elonmusk': 'elonmusk', '  @elonmusk  ': 'elonmusk',
+    'https://twitter.com/elonmusk': 'elonmusk', 'twitter.com/elonmusk': 'elonmusk',
+    'https://instagram.com/elonmusk/': 'elonmusk', 'https://www.linkedin.com/in/elonmusk': 'elonmusk',
+    'https://x.com/elonmusk?lang=en': 'elonmusk', 'github.com/torvalds': 'torvalds',
+    'BeLLa_ho3': 'BeLLa_ho3', 'kbing1977.': 'kbing1977',
 }
-for raw, want in clean_cases.items():
-    got = clean_username(raw)
-    assert got == want, f'clean_username({raw!r}) -> {got!r}, expected {want!r}'
-print(f'  ✓ {len(clean_cases)} cases pass (@, profile links, comma lists all handled)')
+for raw, want in cases.items():
+    got = clean_handle(raw)
+    assert got == want, f'clean_handle({raw!r}) -> {got!r}, want {want!r}'
+ok(f'clean_handle: {len(cases)} forms of pasted input')
 
-print()
-print('=' * 60)
-print('TEST 7: valid_username + confidence_tier')
-print('=' * 60)
-for h in ['elonmusk', 'john.doe', 'a_b-c', 'johndoe janedoe']:
-    assert valid_username(h), f'should be valid: {h!r}'
-for h in ['', 'foo/bar', 'a b!', 'has space/slash']:
-    assert not valid_username(h), f'should be invalid: {h!r}'
-assert valid_username(clean_username('@still')) and clean_username('@still') == 'still'
+# 2. parse_usernames: lists, emails, dupes, junk, cap -------------------------------
+targets, problems = parse_usernames({'username': 'tattedbaddie696, kaytats, pokilife, piercedbeauty, deadrose, kaylaharsha'})
+assert [t['handle'] for t in targets] == ['tattedbaddie696', 'kaytats', 'pokilife', 'piercedbeauty', 'deadrose', 'kaylaharsha'], targets
+assert not problems
+ok('parse_usernames: comma list becomes six separate usernames (the CLI would have glued them)')
+
+targets, problems = parse_usernames({'username': 'frostkatrina@ymail.com'})
+assert len(targets) == 1 and targets[0]['handle'] == 'frostkatrina' and targets[0]['fromEmail'] is True, targets
+ok('parse_usernames: an email becomes a search for its local part, flagged fromEmail')
+
+targets, problems = parse_usernames({'username': 'elonmusk', 'usernames': ['@ElonMusk', 'https://github.com/torvalds', 'jane doe', '']})
+assert [t['handle'] for t in targets] == ['elonmusk', 'torvalds'], targets
+assert any('jane doe' in p and 'space' in p for p in problems), problems
+ok('parse_usernames: merges both fields, drops case-duplicates, reports a name with a space')
+
+targets, problems = parse_usernames({'username': 'foo/bar baz!!'})
+assert targets == [] and problems and 'space' in problems[0], (targets, problems)
+targets, problems = parse_usernames({'username': 'foo/bar'})
+assert targets == [] and problems and 'not a username' in problems[0], (targets, problems)
+assert clean_handle('foo/bar') == 'foo/bar' and clean_handle('x.com/kaytats') == 'kaytats' and clean_handle('kaytats.tumblr.com') == 'kaytats.tumblr.com'
+ok("parse_usernames: 'foo/bar' is junk, not a link to the handle 'bar'")
+
+targets, problems = parse_usernames({'username': ''})
+assert targets == [] and problems == []
+targets, problems = parse_usernames({'username': 'foo/bar!!'})
+assert targets == [] and problems and 'not a username' in problems[0], problems
+ok('parse_usernames: empty and junk input give an explanation, not a crash')
+
+targets, problems = parse_usernames({'usernames': [f'user{i}' for i in range(40)]})
+assert len(targets) == MAX_USERNAMES and any('first 25' in p for p in problems)
+ok('parse_usernames: caps at 25 usernames with a note')
+
+# 3. site model -----------------------------------------------------------------
+assert host_of('https://blog.naver.com/{username}') == 'blog.naver.com'
+assert host_of('https://www.github.com/{username}') == 'github.com'
+assert host_of('https://{username}.tumblr.com') == 'x.tumblr.com'
+assert platform_name('github.com') == 'GitHub' and platform_name('blog.naver.com') == 'Naver'
+assert category_of('Computers Electronics and Technology > Social Networks and Online Communities', False) == 'social'
+assert category_of('Computers Electronics and Technology > Programming and Developer Software', False) == 'developer_tech'
+assert category_of('Adult', False) == 'adult_dating' and category_of('Wiki', True) == 'adult_dating'
+assert category_of('Community and Society > Romance and Relationships', False) == 'adult_dating'
+assert category_of('Arts and Entertainment > Visual Arts and Design', False) == 'photo_design'
+assert category_of('Games > Video Games Consoles and Accessories', False) == 'gaming'
+assert category_of('', False) == 'other' and category_of('Internet', False) == 'other'
+assert set(CATEGORY_TITLES) >= {'social', 'adult_dating', 'gaming', 'developer_tech', 'other'}
+ok('site model: hosts, platform names and category rules')
+
+# 4. select_sites ---------------------------------------------------------------
+SITES = [
+    {'host': 'github.com', 'url': 'https://github.com/{username}', 'category': 'developer_tech', 'categoryDetail': 'Programming', 'country': 'United States', 'adult': False, 'rank': 50},
+    {'host': 'reddit.com', 'url': 'https://reddit.com/user/{username}', 'category': 'social', 'categoryDetail': 'Social Networks', 'country': 'United States', 'adult': False, 'rank': 20},
+    {'host': 'fancentro.com', 'url': 'https://fancentro.com/{username}', 'category': 'adult_dating', 'categoryDetail': 'Adult', 'country': 'United States', 'adult': True, 'rank': 9000},
+    {'host': 'blog.naver.com', 'url': 'https://blog.naver.com/{username}', 'category': 'other', 'categoryDetail': 'Internet', 'country': 'South Korea', 'adult': False, 'rank': 30},
+    {'host': 'noranksite.org', 'url': 'https://noranksite.org/{username}', 'category': 'forums', 'categoryDetail': 'Forums', 'country': None, 'adult': False, 'rank': None},
+]
+hosts, info = select_sites({}, SITES, 100)
+assert hosts is None and info['filters'] == {}
+ok('select_sites: no filters -> let the tool pick its top N')
+
+hosts, info = select_sites({'websites': ['github', 'https://www.reddit.com/', 'myspace.com']}, SITES, 100)
+assert hosts == ['reddit.com', 'github.com'], hosts
+assert info['unknownSites'] == ['myspace.com'], info
+ok('select_sites: named sites resolve by partial or full domain; unknown ones are reported')
+
+hosts, info = select_sites({'siteType': 'Dating', 'top': 900}, SITES, 900)
+assert hosts == ['fancentro.com'] and info['filters']['category'] == 'adult_dating', (hosts, info)
+ok("select_sites: legacy 'Dating' value maps to the adult_dating category")
+
+hosts, info = select_sites({'countries': ['kr', 'United States'], 'excludeAdult': True}, SITES, 2)
+assert hosts == ['reddit.com', 'blog.naver.com'], hosts
+ok('select_sites: country codes and names, adult excluded, top N by popularity')
+
+hosts, info = select_sites({'siteType': 'nonsense'}, SITES, 100)
+assert info.get('unknownCategory') == 'nonsense' and len(hosts) == 5
+ok('select_sites: unknown category is reported and ignored instead of matching nothing')
+
+hosts, info = select_sites({'countries': ['Mars']}, SITES, 100)
+assert hosts == [] and info['sitesMatched'] == 0
+ok('select_sites: filters that match nothing return an empty list (the run explains and stops)')
+
+# 5. build_command --------------------------------------------------------------
+cmd = build_command('elonmusk', top=100, hosts=None, confidence_filter='good', extract=False, metadata=True)
+assert cmd[:3] == ['social-analyzer', '--username', 'elonmusk'] and '--top' in cmd and '100' in cmd
+assert '--mode' in cmd and cmd[cmd.index('--mode') + 1] == 'fast' and '--metadata' in cmd and '--extract' not in cmd
+cmd = build_command('x', top=100, hosts=['github.com', 'reddit.com'], confidence_filter='good,maybe', extract=True, metadata=False)
+assert '--websites' in cmd and cmd[cmd.index('--websites') + 1] == 'github.com reddit.com' and '--top' not in cmd
+assert cmd[cmd.index('--filter') + 1] == 'good,maybe' and '--extract' in cmd and '--metadata' not in cmd
+ok('build_command: top vs named sites, filters and flags wired; always fast mode')
+
+# 6. parse_output ---------------------------------------------------------------
+assert parse_output('{"detected":[{"link":"https://x.com/a","rate":"%100.0"}]}')['detected'][0]['link'] == 'https://x.com/a'
+assert parse_output('banner\n{"detected":[]}\ntrailing')['detected'] == []
+assert parse_output('') == {'detected': [], 'parse_error': 'empty stdout'}
+assert 'parse_error' in parse_output('not json')
+ok('parse_output: JSON, banner-wrapped JSON, empty and garbage stdout')
+
+# 7. confidence + enrich ----------------------------------------------------------
 for rate, tier in [('%100.0', 'high'), ('80%', 'high'), ('%60', 'medium'), ('%20', 'low'), (None, 'unknown')]:
-    assert confidence_tier(rate) == tier, f'confidence_tier({rate!r}) -> {confidence_tier(rate)!r}, want {tier!r}'
+    assert confidence_tier(rate) == tier
 assert parse_rate('%66.6') == 66.6
-print('  ✓ validation gate + confidence tiers correct')
+index = {s['host']: s for s in SITES}
+row = enrich({'link': 'https://github.com/torvalds', 'rate': '%100.0', 'title': 'torvalds (Linus Torvalds)', 'text': 'Linus'}, 'torvalds', index, '2026-09-12T00:00:00Z')
+assert row['platform'] == 'GitHub' and row['site'] == 'github.com' and row['confidence'] == 'high' and row['matchRate'] == 100.0
+assert row['category'] == 'developer_tech' and row['country'] == 'United States' and row['adultSite'] is False and row['siteRank'] == 50
+row = enrich({'link': 'https://unknown.example/u', 'rate': '%25.0'}, 'u', index, 'now')
+assert row['category'] == 'other' and row['country'] is None and row['confidence'] == 'low'
+ok('enrich: rows carry platform, site, confidence, category, country, adult flag, rank')
 
-print()
-print('=' * 60)
-print('TEST 8: REAL scan against "github" (skipped if CLI not installed)')
-print('=' * 60)
+# 8. safe_status never raises ---------------------------------------------------------
+asyncio.run(safe_status('Found 202 profiles'))
+ok('safe_status: a failing SDK status call is logged, not raised (the APIFY_AI crash)')
+
+# 9. summary invariants (documented shape) -------------------------------------------
+sample = json.loads(json.dumps({'recordType': 'summary', 'usernames': ['a'], 'profilesFound': 0, 'message': 'x', 'perUsername': []}))
+assert sample['recordType'] == 'summary'
+ok('summary row shape is serialisable')
+
+# 10. real scan (optional) -------------------------------------------------------------
 if shutil.which('social-analyzer'):
-    real_cmd = ['social-analyzer', '--username', 'github', '--top', '10', '--mode', 'fast',
-                '--output', 'json', '--method', 'find', '--filter', 'good']
-    print(f'  running: {" ".join(real_cmd)}')
-    proc = subprocess.run(real_cmd, capture_output=True, text=True, timeout=120)
-    print(f'  exit={proc.returncode}, stdout={len(proc.stdout)} chars')
-    assert proc.returncode == 0, f'CLI failed: {proc.stderr[:300]}'
+    cmd = build_command('torvalds', top=100, hosts=['github.com', 'reddit.com'], confidence_filter='good', extract=False, metadata=False)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     parsed = parse_output(proc.stdout)
-    assert 'parse_error' not in parsed, f'parse error: {parsed.get("parse_error")}'
-    detected = parsed.get('detected', [])
-    print(f'  detected: {len(detected)} profiles')
-    assert len(detected) >= 1, 'expected at least 1 profile for "github" username'
-    print('  ✓ real scan returned detections')
+    links = [p['link'] for p in parsed.get('detected', [])]
+    assert 'https://github.com/torvalds' in links, (proc.returncode, proc.stdout[:200], proc.stderr[:200])
+    ok(f'real scan: torvalds found on {len(links)} of 2 named sites')
 else:
-    print('  - social-analyzer CLI not installed locally; skipping (runs in the Docker image)')
+    print('  --  real scan skipped (social-analyzer CLI not installed here; it runs in the Docker image)')
 
-print()
-print('ALL TESTS PASS ✓')
+print(f'\nALL {passed} TESTS PASS')

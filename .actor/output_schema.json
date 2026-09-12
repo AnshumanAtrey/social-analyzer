@@ -1,14 +1,26 @@
 {
     "actorOutputSchemaVersion": 1,
-    "title": "Social Analyzer Output",
-    "description": "Username profile discoveries across social media. One dataset record per detected profile (with confidence rating, country, category, extracted metadata) plus one summary record with aggregate counts.",
+    "title": "Social Analyzer output",
+    "description": "Profiles found for each username, one row each with confidence, category and country of the site, plus a run summary.",
     "type": "object",
     "properties": {
-        "detectedProfiles": {
+        "profiles": {
             "type": "string",
-            "title": "Detected Profiles",
-            "description": "One record per discovered profile. Fields: username, platform (site name), link (full profile URL), status (good/maybe/bad), rate (% confidence), country, type (site category), language, rank, extracted (URLs/patterns if --extract), metadata (page metadata if --metadata). Final record has recordType=summary with counts and the executed command.",
+            "title": "Profiles found (dataset)",
+            "description": "One row per matched profile: username, platform, site, link, confidence (high/medium/low), matchRate, category, categoryDetail, country, adultSite, siteRank, pageTitle, pageText, extracted, metadata, checkedAt. The last row (recordType = summary) holds the run totals and per-username notes.",
             "template": "{{links.apiDefaultDatasetUrl}}/items"
+        },
+        "summary": {
+            "type": "string",
+            "title": "Run summary (JSON)",
+            "description": "Totals, filters applied, per-username results, notes about cleaned or skipped input, and the plain-language message shown as the run status.",
+            "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/OUTPUT"
+        },
+        "log": {
+            "type": "string",
+            "title": "Run log",
+            "description": "What was checked, per username, with timings and any scanner warnings.",
+            "template": "{{links.publicRunUrl}}/log"
         }
     }
 }

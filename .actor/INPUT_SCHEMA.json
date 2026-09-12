@@ -1,163 +1,203 @@
 {
-    "title": "Find social media profiles by username",
-    "description": "Enter a username and we find the matching profiles across 900+ sites, ranked by confidence. Just the handle is needed - everything else is optional.",
-    "type": "object",
-    "schemaVersion": 1,
-    "properties": {
-        "username": {
-            "title": "Username",
-            "type": "string",
-            "description": "The handle to search, for example elonmusk. Enter just the handle - paste an @handle or a profile link like twitter.com/elonmusk and we clean it down to the handle. Comma-separate to search several at once: johndoe, janedoe.",
-            "editor": "textfield",
-            "prefill": "elonmusk",
-            "example": "elonmusk"
-        },
-        "mode": {
-            "title": "Scan depth",
-            "type": "string",
-            "description": "How deep to scan. Fast probes the top sites quickly (about 30s for 100 sites) and is best for most runs. Slow reads each page for more detail. Special pulls extra OSINT signals.",
-            "default": "fast",
-            "editor": "select",
-            "enum": ["fast", "slow", "special"],
-            "enumTitles": ["Fast (quick, recommended)", "Slow (reads each page)", "Special (extra OSINT signals)"],
-            "sectionCaption": "Scan options",
-            "sectionDescription": "Control how wide and deep the search goes, and how it is filtered. The defaults work well for most runs."
-        },
-        "top": {
-            "title": "How many sites to scan",
-            "type": "integer",
-            "description": "Scan the top N most popular sites. 100 is about 30s, 500 about 3 minutes, 900 is full coverage.",
-            "default": 100,
-            "minimum": 1,
-            "maximum": 900,
-            "editor": "number"
-        },
-        "websites": {
-            "title": "Specific sites only (optional)",
-            "type": "array",
-            "description": "Scan only these specific sites instead of going by popularity. Leave empty to use 'How many sites to scan' above.",
-            "editor": "select",
-            "items": {
-                "type": "string",
-                "enum": [
-                    "facebook", "instagram", "twitter", "tiktok", "youtube",
-                    "github", "gitlab", "linkedin", "reddit", "pinterest",
-                    "tumblr", "medium", "discord", "telegram", "snapchat",
-                    "twitch", "steam", "spotify", "soundcloud", "behance",
-                    "dribbble", "deviantart", "flickr", "vimeo", "vk",
-                    "ok", "naver", "weibo", "patreon", "wordpress",
-                    "blogger", "fandom", "etsy", "ebay", "amazon",
-                    "tradingview", "kaggle", "stackoverflow", "hackernews", "producthunt"
-                ],
-                "enumTitles": [
-                    "Facebook", "Instagram", "Twitter / X", "TikTok", "YouTube",
-                    "GitHub", "GitLab", "LinkedIn", "Reddit", "Pinterest",
-                    "Tumblr", "Medium", "Discord", "Telegram", "Snapchat",
-                    "Twitch", "Steam", "Spotify", "SoundCloud", "Behance",
-                    "Dribbble", "DeviantArt", "Flickr", "Vimeo", "VK (Russia)",
-                    "OK.ru (Russia)", "Naver (Korea)", "Weibo (China)", "Patreon", "WordPress",
-                    "Blogger", "Fandom", "Etsy", "eBay", "Amazon",
-                    "TradingView", "Kaggle", "StackOverflow", "HackerNews", "ProductHunt"
-                ]
-            },
-            "uniqueItems": true
-        },
-        "countries": {
-            "title": "Filter by country (optional)",
-            "type": "array",
-            "description": "Only scan sites based in these countries. Leave empty to search globally.",
-            "editor": "select",
-            "items": {
-                "type": "string",
-                "enum": ["us", "in", "br", "ru", "cn", "jp", "kr", "de", "fr", "gb", "es", "it", "mx", "tr", "id", "vn", "th", "ph", "ae", "sa"],
-                "enumTitles": [
-                    "United States", "India", "Brazil", "Russia", "China", "Japan", "Korea", "Germany", "France", "United Kingdom",
-                    "Spain", "Italy", "Mexico", "Turkey", "Indonesia", "Vietnam", "Thailand", "Philippines", "UAE", "Saudi Arabia"
-                ]
-            },
-            "uniqueItems": true
-        },
-        "siteType": {
-            "title": "Filter by site category (optional)",
-            "type": "string",
-            "description": "Only scan one category of site. Leave on Any for no filter.",
-            "default": "",
-            "editor": "select",
-            "enum": ["", "Social Networks", "Music", "News", "Forum", "Adult", "Gaming", "Photo", "Video", "Blog", "Shopping", "Dating", "Professional"],
-            "enumTitles": [
-                "Any",
-                "Social Networks",
-                "Music",
-                "News",
-                "Forum",
-                "Adult content",
-                "Gaming",
-                "Photo sharing",
-                "Video sharing",
-                "Blog platforms",
-                "Shopping / Marketplaces",
-                "Dating",
-                "Professional / LinkedIn-style"
-            ]
-        },
-        "method": {
-            "title": "What to return",
-            "type": "string",
-            "description": "Found accounts only is the cleanest. The other options also include misses, which is useful for research.",
-            "default": "find",
-            "editor": "select",
-            "enum": ["find", "get", "all"],
-            "enumTitles": [
-                "Found accounts only (recommended)",
-                "All probes (including misses)",
-                "All results (found + missed + failed)"
-            ]
-        },
-        "filter": {
-            "title": "Confidence threshold",
-            "type": "string",
-            "description": "How sure a match must be to count. High confidence is the cleanest and is recommended.",
-            "default": "good",
-            "editor": "select",
-            "enum": ["good", "good,maybe", "all"],
-            "enumTitles": [
-                "High confidence only (recommended)",
-                "High + medium confidence",
-                "All matches (including uncertain)"
-            ]
-        },
-        "extract": {
-            "title": "Pull emails & links from found profiles",
-            "type": "boolean",
-            "description": "Pulls emails, links and other patterns out of each detected profile.",
-            "default": false,
-            "editor": "checkbox",
-            "sectionCaption": "Advanced",
-            "sectionDescription": "Less common options. The defaults are fine for most runs."
-        },
-        "metadata": {
-            "title": "Add page metadata (name, bio, image)",
-            "type": "boolean",
-            "description": "Adds each profile's page title, description, image and language.",
-            "default": true,
-            "editor": "checkbox"
-        },
-        "trim": {
-            "title": "Trim long text fields",
-            "type": "boolean",
-            "description": "Trims very long text fields for cleaner output. Recommended.",
-            "default": true,
-            "editor": "checkbox"
-        },
-        "timeout": {
-            "title": "Time limit (seconds)",
-            "type": "integer",
-            "description": "Stop the scan after this many seconds and return whatever was found. Default 1800 (30 minutes).",
-            "default": 1800,
-            "minimum": 60,
-            "maximum": 3600,
-            "editor": "number"
-        }
+  "title": "Find social media profiles by username",
+  "description": "Type one username, or several, and get every public profile that uses it across 900+ sites, ranked by how sure we are. Only the username is needed. Everything else narrows the search.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "username": {
+      "title": "Username",
+      "type": "string",
+      "description": "The handle to look up, for example elonmusk. You can paste @elonmusk or a profile link such as twitter.com/elonmusk, we take the handle out of it. Several at once: separate them with commas. If you paste an email address, we search the part before the @ and point you to the email tool.",
+      "editor": "textfield",
+      "prefill": "elonmusk",
+      "example": "elonmusk",
+      "sectionCaption": "Who to look up"
     },
-    "required": ["username"]
+    "usernames": {
+      "title": "More usernames (bulk)",
+      "type": "array",
+      "description": "One handle per line for bulk checks, up to 25 per run. Each username is scanned on its own, so 10 usernames take about 10 times as long as one.",
+      "editor": "stringList",
+      "example": [
+        "johndoe",
+        "jane_doe",
+        "@janedoe99"
+      ],
+      "nullable": true
+    },
+    "top": {
+      "title": "How many sites to check",
+      "type": "integer",
+      "description": "The most popular N sites from the list of 999. 100 sites take about 30 to 40 seconds per username, 300 about 2 minutes, all 999 about 7 minutes.",
+      "default": 100,
+      "prefill": 100,
+      "minimum": 10,
+      "maximum": 999,
+      "editor": "number",
+      "sectionCaption": "Where to look",
+      "sectionDescription": "Leave these empty to check the most popular sites. Set one or more to narrow the search; filters combine."
+    },
+    "websites": {
+      "title": "Only these sites",
+      "type": "array",
+      "description": "Check only the sites you name, by domain: github.com, reddit.com, instagram.com. A partial name like github also works. Any of the 999 sites in the list is accepted; the run tells you if a name is not on it. When set, 'How many sites to check' is ignored.",
+      "editor": "stringList",
+      "example": [
+        "github.com",
+        "reddit.com",
+        "instagram.com"
+      ],
+      "nullable": true
+    },
+    "siteType": {
+      "title": "Only this category",
+      "type": "string",
+      "description": "Restrict the search to one kind of site. The counts show how many sites are in each category. Combine with 'How many sites to check' to take the most popular ones in that category.",
+      "default": "",
+      "editor": "select",
+      "enum": [
+        "",
+        "social",
+        "adult_dating",
+        "gaming",
+        "developer_tech",
+        "forums",
+        "wikis_reference",
+        "entertainment",
+        "photo_design",
+        "news_blogs",
+        "shopping",
+        "jobs_business",
+        "education",
+        "other"
+      ],
+      "enumTitles": [
+        "Any category (999 sites)",
+        "Social networks and communities (31 sites)",
+        "Adult and dating sites (48 sites)",
+        "Gaming (82 sites)",
+        "Developer and tech (169 sites)",
+        "Forums (44 sites)",
+        "Wikis and reference (189 sites)",
+        "Music, video and entertainment (52 sites)",
+        "Photography and design (19 sites)",
+        "News and blogs (14 sites)",
+        "Shopping and marketplaces (12 sites)",
+        "Jobs, business and finance (18 sites)",
+        "Education and science (23 sites)",
+        "Everything else (298 sites)"
+      ]
+    },
+    "countries": {
+      "title": "Only sites from these countries",
+      "type": "array",
+      "description": "Where the site is based, not where the person lives. Most sites in the list are American or Indian; pick a country only when you know the person uses local platforms.",
+      "editor": "select",
+      "items": {
+        "type": "string",
+        "enum": [
+          "United States",
+          "India",
+          "Russia",
+          "Japan",
+          "Iran",
+          "Indonesia",
+          "Poland",
+          "Canada",
+          "Angola",
+          "China",
+          "Egypt",
+          "Czech Republic",
+          "Brazil",
+          "Australia",
+          "Pakistan",
+          "Taiwan",
+          "Germany",
+          "South Korea",
+          "Turkey",
+          "Switzerland",
+          "United Kingdom",
+          "France",
+          "Spain"
+        ],
+        "enumTitles": [
+          "United States (401 sites)",
+          "India (164 sites)",
+          "Russia (40 sites)",
+          "Japan (16 sites)",
+          "Iran (10 sites)",
+          "Indonesia (7 sites)",
+          "Poland (7 sites)",
+          "Canada (6 sites)",
+          "Angola (5 sites)",
+          "China (5 sites)",
+          "Egypt (5 sites)",
+          "Czech Republic (4 sites)",
+          "Brazil (4 sites)",
+          "Australia (4 sites)",
+          "Pakistan (4 sites)",
+          "Taiwan (4 sites)",
+          "Germany (3 sites)",
+          "South Korea (3 sites)",
+          "Turkey (3 sites)",
+          "Switzerland (3 sites)",
+          "United Kingdom (3 sites)",
+          "France (3 sites)",
+          "Spain (3 sites)"
+        ]
+      },
+      "uniqueItems": true,
+      "nullable": true
+    },
+    "excludeAdult": {
+      "title": "Skip adult and dating sites",
+      "type": "boolean",
+      "description": "Leave out the 48 adult and dating sites. Useful for hiring, brand or family checks where those results are not wanted.",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "filter": {
+      "title": "Which matches to keep",
+      "type": "string",
+      "description": "How sure a match must be before it is reported. Confident matches are the cleanest. Include possible matches when the handle is rare and you want every lead; expect a few wrong ones.",
+      "default": "good",
+      "editor": "select",
+      "enum": [
+        "good",
+        "good,maybe",
+        "all"
+      ],
+      "enumTitles": [
+        "Confident matches only (recommended)",
+        "Confident and possible matches",
+        "Everything, including weak guesses"
+      ],
+      "sectionCaption": "Results",
+      "sectionDescription": "What each row should carry. Every found profile is one row, plus one summary row per run."
+    },
+    "metadata": {
+      "title": "Add page details (title, description, image, language)",
+      "type": "boolean",
+      "description": "Reads each found profile page for its title, description, image and language when the site exposes them. On by default; turn off for the fastest possible run.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "extract": {
+      "title": "Pull out emails, links and other patterns",
+      "type": "boolean",
+      "description": "Scans each found profile page for email addresses, links and similar patterns and adds them to the row. Slower, and most sites show none without login.",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "timeout": {
+      "title": "Time limit (seconds)",
+      "type": "integer",
+      "description": "The whole run stops after this many seconds. Usernames that could not start in time are listed in the summary instead of failing the run. A username on 100 sites needs about 40 seconds; on all 999 about 7 minutes.",
+      "default": 1800,
+      "minimum": 60,
+      "maximum": 3600,
+      "editor": "number",
+      "sectionCaption": "Limits"
+    }
+  }
 }

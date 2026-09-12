@@ -1,63 +1,348 @@
 """
-Social Analyzer Apify actor - wraps qeeqbox/social-analyzer.
+Social Analyzer Apify actor - finds a username across 900+ sites.
 
-Finds a username across 900+ social media / online platforms.
-Pushes one dataset record per detected profile plus one summary record.
+Wraps the qeeqbox/social-analyzer CLI in fast mode and adds what real user runs
+(read from the Store's Debugging data, September 2026) showed was missing:
+
+- Several usernames per run. The CLI treats "alice bob" as ONE handle containing a
+  space and then reports instagram.com/alice bob as found. We call it once per handle.
+- Emails pasted into the username box. Three users did that in one week and got a
+  failed run. We now search the part before the @ and point to holehe-email-osint
+  for the address itself.
+- Site filters that work. The CLI's --type and --countries options select nothing
+  in version 0.45, so category, country, adult and named-site filters are applied
+  here from the tool's own sites.json and passed down as --websites.
+- Rows enriched with the site's category, country and adult flag (the CLI returns
+  only link, rate, title, text).
+- A status message that can never fail the run. SDK 3.x validates the run object
+  against an enum that lacks the new APIFY_AI run origin; the message is stored
+  server-side before that parse, so a parse error is logged, not raised.
 """
 import asyncio
+import difflib
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
+import sysconfig
+import time
 from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlparse
 
 from apify import Actor
 
+TOOL = 'social-analyzer'
+MAX_USERNAMES = 25            # one CLI run per username; 25 x 100 sites stays under an hour
+MIN_SECONDS_PER_USERNAME = 20  # do not start a handle we cannot finish
+RUN_SAFETY_MARGIN_S = 60      # leave time to write the summary before the platform kills us
+HOLEHE_URL = 'https://apify.com/anshumanatrey/holehe-email-osint'
 
-# Hosts we recognize in a pasted profile link, so we can pull the handle out of it.
-KNOWN_HOSTS = ('twitter.com', 'x.com', 'instagram.com', 'facebook.com', 'github.com',
-               'linkedin.com', 'tiktok.com', 'youtube.com', 'reddit.com', 't.me', 'medium.com')
+HANDLE_RE = re.compile(r'^[A-Za-z0-9._-]{1,100}$')
+EMAIL_RE = re.compile(r'^[^@\s/]+@[^@\s/]+\.[^@\s/]+$')
+
+# Friendly categories over the tool's 90 raw "type" strings. Order matters: the
+# first matching rule wins, so "Social Networks and Online Communities" is social,
+# not developer, even though it sits under "Computers Electronics and Technology".
+CATEGORY_RULES = [
+    ('adult_dating', ('adult', 'romance', 'dating')),
+    ('social', ('social network', 'online communit', 'community and society')),
+    ('gaming', ('game',)),
+    ('forums', ('forum',)),
+    ('wikis_reference', ('wiki', 'dictionar', 'encyclop', 'reference')),
+    ('photo_design', ('photograph', 'visual arts', 'design', 'graphics')),
+    ('entertainment', ('music', 'entertainment', 'tv', 'streaming', 'video', 'anim', 'comic', 'humor', 'book', 'literature')),
+    ('developer_tech', ('programming', 'software', 'computer', 'technology', 'hosting', 'file sharing', 'search engine', 'hardware', 'electronics')),
+    ('news_blogs', ('news', 'blog', 'media')),
+    ('shopping', ('commerce', 'shopping', 'marketplace', 'auction')),
+    ('jobs_business', ('job', 'career', 'business', 'finance', 'marketing', 'investing', 'banking')),
+    ('education', ('education', 'science', 'universit', 'librar', 'biology', 'physics', 'philosophy')),
+]
+CATEGORY_TITLES = {
+    '': 'Any category',
+    'social': 'Social networks and communities',
+    'adult_dating': 'Adult and dating sites',
+    'gaming': 'Gaming',
+    'developer_tech': 'Developer and tech',
+    'forums': 'Forums',
+    'wikis_reference': 'Wikis and reference',
+    'entertainment': 'Music, video and entertainment',
+    'photo_design': 'Photography and design',
+    'news_blogs': 'News and blogs',
+    'shopping': 'Shopping and marketplaces',
+    'jobs_business': 'Jobs, business and finance',
+    'education': 'Education and science',
+    'other': 'Everything else',
+}
+# Values users typed into the old free-text "siteType" field, kept working.
+CATEGORY_ALIASES = {
+    'dating': 'adult_dating', 'adult': 'adult_dating', 'adult content': 'adult_dating',
+    'social networks': 'social', 'social': 'social', 'gaming': 'gaming', 'games': 'gaming',
+    'music': 'entertainment', 'video': 'entertainment', 'video sharing': 'entertainment',
+    'photo': 'photo_design', 'photo sharing': 'photo_design', 'blog': 'news_blogs',
+    'blog platforms': 'news_blogs', 'news': 'news_blogs', 'forum': 'forums',
+    'shopping': 'shopping', 'shopping / marketplaces': 'shopping',
+    'professional': 'jobs_business', 'professional / linkedin-style': 'jobs_business',
+}
+# Well-known platforms whose raw type is a generic "Internet" or missing.
+CATEGORY_BY_HOST = {
+    'vk.com': 'social', 'twitter.com': 'social', 'mobile.twitter.com': 'social', 'x.com': 'social',
+    't.me': 'social', 'telegram.org': 'social', 'snapchat.com': 'social', 'discord.com': 'social',
+    'threads.net': 'social', 'quora.com': 'social', 'social.msdn.microsoft.com': 'forums',
+    'youtube.com': 'entertainment', 'play.google.com': 'shopping', 'google.com': 'other',
+}
+COUNTRY_ALIASES = {
+    'us': 'United States', 'usa': 'United States', 'in': 'India', 'ru': 'Russia', 'jp': 'Japan',
+    'ir': 'Iran', 'id': 'Indonesia', 'pl': 'Poland', 'ca': 'Canada', 'cn': 'China', 'eg': 'Egypt',
+    'cz': 'Czech Republic', 'br': 'Brazil', 'au': 'Australia', 'pk': 'Pakistan', 'tw': 'Taiwan',
+    'de': 'Germany', 'kr': 'South Korea', 'tr': 'Turkey', 'ch': 'Switzerland', 'gb': 'United Kingdom',
+    'uk': 'United Kingdom', 'fr': 'France', 'es': 'Spain', 'vn': 'Vietnam', 'sa': 'Saudi Arabia',
+    'sg': 'Singapore', 'mx': 'Mexico', 'ng': 'Nigeria', 'ma': 'Morocco', 'ao': 'Angola',
+}
 
 
-def _clean_one(tok: str) -> str:
-    """Clean a single handle: drop @, and pull the handle out of a pasted profile link."""
-    s = tok.strip()
-    if not s:
-        return ''
-    # If it looks like a URL or a host/path, take the last meaningful path segment.
-    if '/' in s or '://' in s or any(h in s.lower() for h in KNOWN_HOSTS):
-        s = re.sub(r'^[a-zA-Z][a-zA-Z0-9+.\-]*://', '', s)   # strip scheme
-        s = s.split('?', 1)[0].split('#', 1)[0]              # strip query / fragment
-        segs = [p for p in s.split('/') if p]
-        if segs:
-            s = segs[-1]                                     # last path segment = handle
-    return s.lstrip('@').strip()
+# --------------------------------------------------------------------------- sites --
+def find_sites_json() -> Path | None:
+    """sites.json ships inside the pip package as social-analyzer/data/sites.json."""
+    candidates = [Path(sysconfig.get_paths()['purelib']), Path(sysconfig.get_paths()['platlib'])]
+    candidates += [Path(p) for p in sys.path if p]
+    tool = shutil.which(TOOL)
+    if tool:
+        # <venv>/bin/social-analyzer -> <venv>/lib/pythonX.Y/site-packages
+        candidates += list(Path(tool).resolve().parent.parent.glob('lib/python*/site-packages'))
+    for base in candidates:
+        p = base / 'social-analyzer' / 'data' / 'sites.json'
+        if p.is_file():
+            return p
+    return None
 
 
-def clean_username(raw: str) -> str:
-    """Normalize pasted input into bare handle(s) the scanner can use.
+def host_of(url: str) -> str:
+    """'https://blog.naver.com/{username}' -> 'blog.naver.com'."""
+    netloc = urlparse(url.replace('{username}', 'x')).netloc.lower()
+    return netloc.split('@')[-1].split(':')[0].removeprefix('www.')
 
-    Strips '@', turns a pasted profile link (twitter.com/elonmusk) into 'elonmusk',
-    and accepts comma- or space-separated lists, returning them space-joined (the
-    multi-username format the scanner expects). Without this, '@elonmusk' or a link
-    is searched literally and produces confidently-wrong URLs like github.com/@elonmusk.
+
+def category_of(raw_type: str, nsfw: bool) -> str:
+    t = (raw_type or '').lower()
+    if nsfw:
+        return 'adult_dating'
+    for slug, needles in CATEGORY_RULES:
+        if any(n in t for n in needles):
+            return slug
+    return 'other'
+
+
+def platform_name(host: str) -> str:
+    """'blog.naver.com' -> 'Naver', 'about.me' -> 'About.me', 'github.com' -> 'GitHub'."""
+    known = {'github.com': 'GitHub', 'gitlab.com': 'GitLab', 'youtube.com': 'YouTube',
+             'tiktok.com': 'TikTok', 'linkedin.com': 'LinkedIn', 'soundcloud.com': 'SoundCloud',
+             'deviantart.com': 'DeviantArt', 'x.com': 'X (Twitter)', 'twitter.com': 'X (Twitter)',
+             'vk.com': 'VK', 'ok.ru': 'OK.ru', 'about.me': 'About.me', 'last.fm': 'Last.fm'}
+    if host in known:
+        return known[host]
+    parts = host.split('.')
+    if len(parts) >= 3 and parts[-2] in ('co', 'com', 'org', 'net'):
+        return parts[-3].capitalize()
+    return parts[-2].capitalize() if len(parts) >= 2 else host
+
+
+def load_sites() -> list[dict]:
+    """The tool's site list, normalised: host, category, country, adult flag, rank."""
+    path = find_sites_json()
+    if not path:
+        Actor.log.warning('sites.json not found; category, country and adult filters are unavailable this run')
+        return []
+    raw = json.loads(path.read_text(encoding='utf-8'))
+    entries = raw.get('websites_entries', raw if isinstance(raw, list) else [])
+    sites = []
+    for s in entries:
+        url = s.get('url') or ''
+        if '{username}' not in url:
+            continue
+        nsfw = str(s.get('nsfw', 'false')).lower() == 'true' or 'adult' in (s.get('type') or '').lower()
+        rank = s.get('global_rank')
+        # "https://{username}.tumblr.com" -> host "tumblr.com"; a found link like
+        # kaytats.tumblr.com is matched back to it by stripping leading labels.
+        host = host_of(url).removeprefix('x.') if '{username}.' in url else host_of(url)
+        sites.append({
+            'host': host,
+            'url': url,
+            'category': CATEGORY_BY_HOST.get(host) or category_of(s.get('type'), nsfw),
+            'categoryDetail': s.get('type') or None,
+            'country': s.get('country') or None,
+            'adult': nsfw,
+            'rank': int(rank) if isinstance(rank, (int, float)) and rank else None,
+        })
+    return sites
+
+
+# ------------------------------------------------------------------------ input --
+URL_RE = re.compile(r'^(?:[a-zA-Z][a-zA-Z0-9+.-]*://)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?::\d+)?/', re.I)
+
+
+def clean_handle(token: str) -> str:
+    """Bare handle out of '@name', 'https://x.com/name/', 'instagram.com/name?hl=en'.
+
+    Only something that looks like a real URL (a domain followed by a path) is
+    treated as a link; 'foo/bar' is junk, not the handle 'bar'.
     """
-    if not raw:
-        return raw
-    toks = re.split(r'[,\s]+', str(raw).strip())
-    cleaned = [c for c in (_clean_one(t) for t in toks) if c]
-    return ' '.join(cleaned)
+    s = token.strip().strip('"\'<>')
+    if URL_RE.match(s):
+        s = re.sub(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', '', s)
+        s = s.split('?', 1)[0].split('#', 1)[0]
+        segs = [p for p in s.split('/') if p]
+        s = segs[-1] if len(segs) > 1 else ''
+    return s.lstrip('@').strip().rstrip('.,;:')
 
 
-def valid_username(handle: str) -> bool:
-    """True if every token is a plausible handle (no junk, spaces, or leftover URL bits)."""
-    if not handle:
-        return False
-    return all(re.fullmatch(r'[A-Za-z0-9._\-]{1,100}', p) for p in handle.split(' '))
+def parse_usernames(inp: dict) -> tuple[list[dict], list[str]]:
+    """Collect targets from `username` (text, may hold a list) and `usernames` (list).
+
+    Returns (targets, problems). Each target: {handle, original, fromEmail}.
+    An email address becomes a search for its local part plus a pointer to holehe.
+    """
+    # Commas, semicolons and newlines separate usernames. A space does not: "john doe"
+    # is one wrong entry (a name, not a handle), not two searches for "john" and "doe".
+    raw: list[str] = []
+    single = inp.get('username')
+    if isinstance(single, str) and single.strip():
+        raw += re.split(r'[,;\n\r\t]+', single.strip())
+    many = inp.get('usernames')
+    if isinstance(many, str):
+        raw += re.split(r'[,;\n\r\t]+', many.strip())
+    elif isinstance(many, list):
+        for item in many:
+            if isinstance(item, str) and item.strip():
+                raw += re.split(r'[,;\n\r\t]+', item.strip())
+
+    targets, problems, seen = [], [], set()
+    for tok in raw:
+        tok = tok.strip()
+        if not tok:
+            continue
+        if ' ' in tok:
+            problems.append(f'"{tok}" contains a space. Usernames have no spaces; separate several usernames with commas.')
+            continue
+        from_email = bool(EMAIL_RE.match(tok))
+        handle = clean_handle(tok.split('@', 1)[0]) if from_email else clean_handle(tok)
+        if not handle:
+            problems.append(f'"{tok}" has no usable handle')
+            continue
+        if not HANDLE_RE.match(handle):
+            problems.append(f'"{tok}" is not a username (letters, digits, dot, underscore and dash only)')
+            continue
+        key = handle.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        targets.append({'handle': handle, 'original': tok, 'fromEmail': from_email})
+    if len(targets) > MAX_USERNAMES:
+        problems.append(f'{len(targets)} usernames given; this run checks the first {MAX_USERNAMES}')
+        targets = targets[:MAX_USERNAMES]
+    return targets, problems
 
 
-def parse_rate(rate) -> float:
-    """qeeqbox returns a match rate like '%100.0' or '100.0%'. Return it as a float, or None."""
+def as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [v.strip() for v in re.split(r'[,;\n ]+', value) if v.strip()]
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+def select_sites(inp: dict, sites: list[dict], top: int) -> tuple[list[str] | None, dict]:
+    """Apply the user's filters to the site list.
+
+    Returns (hosts, info). hosts is None when no filter is set, meaning "let the tool
+    take its top N by popularity". Otherwise it is the ordered host list to probe.
+    """
+    wanted_sites = [w.lower().removeprefix('https://').removeprefix('http://').removeprefix('www.').strip('/')
+                    for w in as_list(inp.get('websites'))]
+    category = (inp.get('siteType') or inp.get('siteCategory') or '').strip()
+    category = CATEGORY_ALIASES.get(category.lower(), category)
+    countries = [COUNTRY_ALIASES.get(c.lower(), c) for c in as_list(inp.get('countries'))]
+    exclude_adult = bool(inp.get('excludeAdult', False))
+
+    info = {'filters': {}, 'unknownSites': [], 'suggestions': {}, 'sitesMatched': None}
+    if wanted_sites:
+        info['filters']['websites'] = wanted_sites
+    if category:
+        info['filters']['category'] = category
+    if countries:
+        info['filters']['countries'] = countries
+    if exclude_adult:
+        info['filters']['excludeAdult'] = True
+    if not info['filters']:
+        return None, info
+    if not sites:
+        info['error'] = 'site list unavailable, filters could not be applied'
+        return None, info
+
+    chosen = sites
+    if wanted_sites:
+        chosen, hosts = [], {s['host'] for s in sites}
+        for w in wanted_sites:
+            hits = [s for s in sites if w == s['host'] or w in s['host'] or s['host'] in w]
+            if not hits:
+                info['unknownSites'].append(w)
+                close = difflib.get_close_matches(w, hosts, n=3, cutoff=0.6)
+                if close:
+                    info['suggestions'][w] = close
+            chosen += hits
+    if category and category in CATEGORY_TITLES:
+        chosen = [s for s in chosen if s['category'] == category]
+    elif category:
+        info['unknownCategory'] = category
+    if countries:
+        chosen = [s for s in chosen if s['country'] in countries]
+    if exclude_adult:
+        chosen = [s for s in chosen if s['category'] != 'adult_dating']
+
+    chosen = sorted({s['host']: s for s in chosen}.values(), key=lambda s: (s['rank'] is None, s['rank'] or 0))
+    if not wanted_sites:
+        chosen = chosen[:top]
+    info['sitesMatched'] = len(chosen)
+    return [s['host'] for s in chosen], info
+
+
+# ------------------------------------------------------------------------- tool --
+def build_command(username: str, *, top: int, hosts: list[str] | None, confidence_filter: str,
+                  extract: bool, metadata: bool) -> list[str]:
+    cmd = [TOOL, '--username', username, '--output', 'json', '--mode', 'fast',
+           '--method', 'find', '--filter', confidence_filter, '--options', 'link,rate,title,text', '--trim']
+    if hosts:
+        cmd += ['--websites', ' '.join(hosts)]
+    else:
+        cmd += ['--top', str(top)]
+    if extract:
+        cmd.append('--extract')
+    if metadata:
+        cmd.append('--metadata')
+    return cmd
+
+
+def parse_output(stdout: str) -> dict:
+    """The CLI prints one JSON object; on some paths it prints nothing at all."""
+    if not stdout or not stdout.strip():
+        return {'detected': [], 'parse_error': 'empty stdout'}
+    try:
+        return json.loads(stdout.strip())
+    except json.JSONDecodeError:
+        pass
+    start, end = stdout.find('{'), stdout.rfind('}')
+    if start != -1 and end > start:
+        try:
+            return json.loads(stdout[start:end + 1])
+        except json.JSONDecodeError as e:
+            return {'detected': [], 'parse_error': f'JSON decode failed: {e}'}
+    return {'detected': [], 'parse_error': 'no JSON object found in stdout'}
+
+
+def parse_rate(rate) -> float | None:
+    """'%100.0' or '66.6%' -> 100.0 / 66.6."""
     if rate is None:
         return None
     m = re.search(r'[\d.]+', str(rate))
@@ -65,234 +350,248 @@ def parse_rate(rate) -> float:
 
 
 def confidence_tier(rate) -> str:
-    """Bucket a match rate into a plain-language confidence tier."""
     v = parse_rate(rate)
     if v is None:
         return 'unknown'
     return 'high' if v >= 75 else 'medium' if v >= 50 else 'low'
 
 
-def build_command(input_data: dict) -> tuple:
-    """Build the social-analyzer argv. Returns (cmd, summary_label)."""
-    username = input_data['username']
-    cmd = [
-        'social-analyzer',
-        '--username', username,
-        '--output', 'json',
-    ]
-
-    mode = input_data.get('mode', 'fast')
-    cmd.extend(['--mode', mode])
-
-    method = input_data.get('method', 'find')
-    cmd.extend(['--method', method])
-
-    filt = input_data.get('filter', 'good')
-    cmd.extend(['--filter', filt])
-
-    # 'websites' takes precedence over 'top' if both present.
-    # Accept BOTH array (new schema) and string (legacy) for backward compat.
-    websites_raw = input_data.get('websites')
-    if isinstance(websites_raw, list):
-        websites = ' '.join(s.strip() for s in websites_raw if s and isinstance(s, str))
-    else:
-        websites = (websites_raw or '').strip()
-    if websites:
-        cmd.extend(['--websites', websites])
-    else:
-        top = input_data.get('top', 100)
-        cmd.extend(['--top', str(top)])
-
-    countries_raw = input_data.get('countries')
-    if isinstance(countries_raw, list):
-        countries = ' '.join(s.strip() for s in countries_raw if s and isinstance(s, str))
-    else:
-        countries = (countries_raw or '').strip()
-    if countries:
-        cmd.extend(['--countries', countries])
-
-    site_type = (input_data.get('siteType') or '').strip()
-    if site_type:
-        cmd.extend(['--type', site_type])
-
-    if input_data.get('extract'):
-        cmd.append('--extract')
-    if input_data.get('metadata'):
-        cmd.append('--metadata')
-    if input_data.get('trim'):
-        cmd.append('--trim')
-
-    # Always request the 4 main option groups so dataset rows are rich
-    cmd.extend(['--options', 'link,rate,title,text'])
-
-    return cmd, mode
+def enrich(profile: dict, username: str, site_index: dict[str, dict], checked_at: str) -> dict:
+    link = profile.get('link') or ''
+    host = host_of(link) if link else ''
+    site = site_index.get(host) or {}
+    if not site and host:
+        # subdomain-pattern sites: kaytats.tumblr.com -> tumblr.com
+        labels = host.split('.')
+        for i in range(1, len(labels) - 1):
+            site = site_index.get('.'.join(labels[i:])) or {}
+            if site:
+                break
+    return {
+        'recordType': 'profile',
+        'username': username,
+        'platform': platform_name(host) if host else (profile.get('title') or 'unknown'),
+        'site': host or None,
+        'link': link or None,
+        'confidence': confidence_tier(profile.get('rate')),
+        'matchRate': parse_rate(profile.get('rate')),
+        'category': site.get('category') or 'other',
+        'categoryDetail': site.get('categoryDetail'),
+        'country': site.get('country'),
+        'adultSite': bool(site.get('adult', False)),
+        'siteRank': site.get('rank'),
+        'pageTitle': profile.get('title'),
+        'pageText': profile.get('text'),
+        'extracted': profile.get('extracted'),
+        'metadata': profile.get('metadata'),
+        'checkedAt': checked_at,
+    }
 
 
-def parse_output(stdout: str) -> dict:
-    """social-analyzer outputs JSON on stdout. Returns {detected: [...], extra: ...} or {error: ...}."""
-    if not stdout or not stdout.strip():
-        return {'detected': [], 'parse_error': 'empty stdout'}
+async def safe_status(message: str) -> None:
+    """Set the run's status message without ever failing the run.
 
-    # Try to parse the whole thing first
+    The message is stored by the API before the SDK parses the response; SDK 3.x
+    then validates the run object against an enum missing the APIFY_AI origin and
+    raises. That raise used to turn 8 finished runs a week into FAILED.
+    """
     try:
-        return json.loads(stdout.strip())
-    except json.JSONDecodeError:
-        pass
-
-    # Fallback: find the first {...} block (CLI can prefix banners)
-    start = stdout.find('{')
-    end = stdout.rfind('}')
-    if start != -1 and end != -1 and end > start:
-        try:
-            return json.loads(stdout[start:end + 1])
-        except json.JSONDecodeError as e:
-            return {'detected': [], 'parse_error': f'JSON decode failed: {e}'}
-
-    return {'detected': [], 'parse_error': 'no JSON object found in stdout'}
+        await Actor.set_status_message(message)
+    except Exception as exc:  # noqa: BLE001
+        Actor.log.debug(f'status message stored but not confirmed by the SDK: {exc}')
 
 
+def seconds_left_in_run() -> float | None:
+    """Seconds until the platform kills this run, or None when not on the platform."""
+    config = getattr(Actor, 'configuration', None) or getattr(Actor, 'config', None)
+    timeout_at = getattr(config, 'timeout_at', None) if config else None
+    if not timeout_at:
+        return None
+    now = datetime.now(timezone.utc)
+    return (timeout_at - now).total_seconds()
+
+
+# -------------------------------------------------------------------------- main --
 async def main() -> None:
     async with Actor:
-        Actor.log.info('Social Analyzer actor starting')
+        Actor.log.info('Social Analyzer starting')
+        inp = await Actor.get_input() or {}
 
-        input_data = await Actor.get_input() or {}
-        raw_username = input_data.get('username')
-        if not raw_username or not str(raw_username).strip():
-            await Actor.fail(status_message='Enter a username, e.g. elonmusk (just the handle, not @elonmusk or a link).')
-            return
-
-        # Auto-clean pasted input (@, profile link, comma list) into bare handle(s), then
-        # validate. A raw '@handle' or link is searched literally and returns confidently
-        # broken URLs (github.com/@handle) while still saying "success" - this stops that.
-        username = clean_username(raw_username)
-        if not valid_username(username):
+        targets, problems = parse_usernames(inp)
+        for p in problems:
+            Actor.log.warning(p)
+        if not targets:
+            hint = problems[0] if problems else 'No username given.'
             await Actor.fail(status_message=(
-                f'"{raw_username}" does not look like a username. Enter just the handle, '
-                f'e.g. elonmusk - no @, no link, no spaces.'))
-            return
-        if username != str(raw_username).strip():
-            Actor.log.info(f'Cleaned input "{raw_username}" -> "{username}"')
-        input_data['username'] = username   # use the cleaned value downstream
-
-        cmd, mode = build_command(input_data)
-        Actor.log.info(f'Username: {username}')
-        Actor.log.info(f'Mode: {mode}')
-        Actor.log.info(f'Command: {" ".join(cmd)}')
-
-        timeout = int(input_data.get('timeout', 1800))
-        timestamp = datetime.now(timezone.utc).isoformat()
-        start_wall = datetime.now(timezone.utc)
-
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            await Actor.fail(status_message=f'social-analyzer timed out after {timeout}s')
-            return
-        except FileNotFoundError as e:
-            await Actor.fail(status_message=f'social-analyzer binary not found: {e}')
+                f'{hint} Enter the username to look up, for example elonmusk. You can paste an '
+                f'@handle or a profile link, and list several separated by commas.'))
             return
 
-        Actor.log.info(f'social-analyzer exit code: {result.returncode} (stdout {len(result.stdout)} chars, stderr {len(result.stderr)} chars)')
-
-        # Surface stderr if anything bad happened (CLI writes errors there)
-        if result.stderr:
-            for line in [l for l in result.stderr.splitlines() if l.strip()][-20:]:
-                Actor.log.warning(line)
-
-        parsed = parse_output(result.stdout)
-
-        if 'parse_error' in parsed:
-            Actor.log.error(f'Output parse error: {parsed["parse_error"]}')
-            # surface first chunk of stdout for debugging
-            Actor.log.info(f'stdout sample: {result.stdout[:500]}')
-            await Actor.set_status_message(
-                f'The scan did not return readable results for "{username}". Try again, or switch to fast mode.')
-            await Actor.push_data({
-                'recordType': 'summary',
-                'username': username,
-                'mode': mode,
-                'success': False,
-                'error': parsed['parse_error'],
-                'exitCode': result.returncode,
-                'timestamp': timestamp,
-            })
+        if not shutil.which(TOOL):
+            await Actor.fail(status_message=(
+                'The scanner is missing from this build. This is on us, not you: please report it '
+                'and we will ship a fixed build within hours.'))
             return
 
-        detected = parsed.get('detected', []) or []
-        unknown  = parsed.get('unknown', []) or []
-        failed   = parsed.get('failed', []) or []
+        top = max(10, min(int(inp.get('top') or 100), 999))
+        confidence_filter = inp.get('filter') or 'good'
+        if confidence_filter not in ('good', 'good,maybe', 'all'):
+            confidence_filter = 'good'
+        extract = bool(inp.get('extract', False))
+        metadata = bool(inp.get('metadata', True))
 
-        # Rank strongest matches first so real profiles surface above long-shot guesses,
-        # and tag each with a plain confidence tier (the raw match rate alone reads as noise).
-        detected.sort(key=lambda p: parse_rate(p.get('rate')) or 0, reverse=True)
-        tier_counts = {'high': 0, 'medium': 0, 'low': 0, 'unknown': 0}
+        notes: list[str] = []
+        legacy_mode = inp.get('mode')
+        if legacy_mode and legacy_mode != 'fast':
+            notes.append(f'Scan depth "{legacy_mode}" is no longer offered (it returned no data in the '
+                         f'current scanner); ran the fast scan instead.')
+        for t in targets:
+            if t['fromEmail']:
+                notes.append(f'"{t["original"]}" is an email address. Searched the part before the @ '
+                             f'("{t["handle"]}") as a username. To find accounts registered with the '
+                             f'email itself, use {HOLEHE_URL}')
+        notes += problems
 
-        # Push one dataset record per detected profile
-        for profile in detected:
-            tier = confidence_tier(profile.get('rate'))
-            tier_counts[tier] += 1
-            await Actor.push_data({
-                'recordType': 'profile',
-                'username': username,
-                'platform': profile.get('title') or profile.get('text'),
-                'link': profile.get('link'),
-                'confidence': tier,
-                'status': profile.get('status'),
-                'rate': profile.get('rate'),
-                'country': profile.get('country'),
-                'language': profile.get('language'),
-                'type': profile.get('type'),
-                'rank': profile.get('rank'),
-                'extracted': profile.get('extracted'),
-                'metadata': profile.get('metadata'),
-                'text': profile.get('text'),
-                'timestamp': timestamp,
-            })
+        sites = load_sites()
+        site_index = {s['host']: s for s in sites}
+        hosts, selection = select_sites(inp, sites, top)
+        if selection.get('unknownSites'):
+            for w in selection['unknownSites']:
+                sugg = selection['suggestions'].get(w)
+                notes.append(f'Site "{w}" is not in the list' + (f'; did you mean {", ".join(sugg)}?' if sugg else '.'))
+        if selection.get('unknownCategory'):
+            notes.append(f'Category "{selection["unknownCategory"]}" is not known; '
+                         f'valid values: {", ".join(k for k in CATEGORY_TITLES if k)}. No category filter applied.')
+        if selection.get('error'):
+            notes.append(selection['error'])
+        sites_per_username = selection['sitesMatched'] if hosts is not None else top
+        if hosts is not None and not hosts:
+            await Actor.fail(status_message=(
+                'Your filters match no sites. ' + ' '.join(notes) if notes else
+                'Your site, category or country filters match no sites in the list. Loosen a filter and run again.'))
+            return
+        Actor.log.info(f'{len(targets)} username(s), {sites_per_username} site(s) each, filters={selection["filters"] or "none"}')
 
-        wall_duration = (datetime.now(timezone.utc) - start_wall).total_seconds()
-        found = len(detected)
-        high = tier_counts['high']
+        # Time budget: the user's limit, capped so the summary is written before the
+        # platform kills the run. The CLI has no partial output, so an unfinished
+        # username yields nothing, which is why we refuse to start one we cannot finish.
+        user_limit = int(inp.get('timeout') or 1800)
+        platform_left = seconds_left_in_run()
+        budget = user_limit if platform_left is None else min(user_limit, max(30, platform_left - RUN_SAFETY_MARGIN_S))
+        deadline = time.monotonic() + budget
 
-        # Tell the user clearly what happened. A 0-result run, or one where every match is
-        # weak, must not look identical to a strong run - that silent gap is the main churn.
-        if found == 0:
-            note = ('0 profiles found. Enter just the handle (like elonmusk), not @elonmusk or a '
-                    'profile link. Check the spelling, or raise "How many sites to scan" for wider coverage.')
-            Actor.log.warning(note)
-            await Actor.set_status_message(note)
-        elif high == 0:
-            note = (f'{found} possible profiles for "{username}", but none high-confidence. '
-                    f'These are weaker matches - check the top-ranked ones first.')
-            Actor.log.info(note)
-            await Actor.set_status_message(note)
+        checked_at = datetime.now(timezone.utc).isoformat()
+        started = time.monotonic()
+        per_username: list[dict] = []
+        totals = {'profiles': 0, 'high': 0, 'medium': 0, 'low': 0, 'failed': 0, 'unknown': 0}
+        skipped_for_time: list[str] = []
+        tool_errors = 0
+
+        for i, t in enumerate(targets, 1):
+            username = t['handle']
+            remaining = deadline - time.monotonic()
+            if remaining < MIN_SECONDS_PER_USERNAME:
+                skipped_for_time.append(username)
+                continue
+            cmd = build_command(username, top=top, hosts=hosts, confidence_filter=confidence_filter,
+                                extract=extract, metadata=metadata)
+            Actor.log.info(f'[{i}/{len(targets)}] {username}: checking {sites_per_username} sites')
+            t0 = time.monotonic()
+            entry = {'username': username, 'original': t['original'], 'fromEmail': t['fromEmail'],
+                     'sitesChecked': sites_per_username, 'profilesFound': 0, 'high': 0, 'medium': 0,
+                     'low': 0, 'sitesFailed': 0, 'sitesUnclear': 0, 'seconds': 0.0, 'note': None}
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=max(10, remaining))
+            except subprocess.TimeoutExpired:
+                entry['note'] = f'did not finish within the time limit ({int(remaining)} s left); no results for this username'
+                entry['seconds'] = round(time.monotonic() - t0, 1)
+                per_username.append(entry)
+                Actor.log.warning(f'{username}: {entry["note"]}')
+                continue
+            entry['seconds'] = round(time.monotonic() - t0, 1)
+            noise = ('REPLACEMENT CHARACTER', 'XMLParsedAsHTMLWarning', 'warnings.filterwarnings', 'import warnings',
+                     'BeautifulSoup(', 'from bs4 import')
+            for line in [l for l in result.stderr.splitlines() if l.strip() and not any(n in l for n in noise)][-5:]:
+                Actor.log.warning(f'{username}: {line[:300]}')
+
+            parsed = parse_output(result.stdout)
+            if 'parse_error' in parsed:
+                tool_errors += 1
+                entry['note'] = (f'the scanner returned no data (exit code {result.returncode}, {parsed["parse_error"]}). '
+                                 f'Usually a temporary problem; run this username again.')
+                Actor.log.error(f'{username}: {entry["note"]}')
+                per_username.append(entry)
+                continue
+
+            detected = parsed.get('detected') or []
+            entry['sitesFailed'] = len(parsed.get('failed') or [])
+            entry['sitesUnclear'] = len(parsed.get('unknown') or [])
+            detected.sort(key=lambda p: parse_rate(p.get('rate')) or 0, reverse=True)
+            rows = [enrich(p, username, site_index, checked_at) for p in detected]
+            if rows:
+                await Actor.push_data(rows)
+            for r in rows:
+                entry[r['confidence'] if r['confidence'] in ('high', 'medium', 'low') else 'low'] += 1
+            entry['profilesFound'] = len(rows)
+            totals['profiles'] += len(rows)
+            for k in ('high', 'medium', 'low'):
+                totals[k] += entry[k]
+            totals['failed'] += entry['sitesFailed']
+            totals['unknown'] += entry['sitesUnclear']
+            if not rows:
+                entry['note'] = 'no profile with this exact handle on the sites checked'
+            per_username.append(entry)
+            Actor.log.info(f'{username}: {len(rows)} profiles ({entry["high"]} high confidence) in {entry["seconds"]}s')
+
+        # ---- summary: one row (charged like a profile row) and one free OUTPUT record
+        duration = round(time.monotonic() - started, 1)
+        checked = [e for e in per_username if e['note'] is None or e['note'].startswith('no profile')]
+        if skipped_for_time:
+            notes.append(f'Time limit reached before {len(skipped_for_time)} username(s) could start: '
+                         f'{", ".join(skipped_for_time)}. Raise the time limit or check fewer sites.')
+
+        if totals['profiles'] == 0 and len(checked) == len(targets):
+            headline = (f'No profiles found for {", ".join(t["handle"] for t in targets)} on {sites_per_username} sites. '
+                        f'The handle may be spelled differently there, or the person does not use it publicly. '
+                        f'Try more sites or the "confident and possible" setting.')
+        elif totals['profiles'] == 0:
+            headline = (f'No results. {tool_errors} of {len(targets)} username(s) could not be scanned; '
+                        f'see the notes and run again.')
         else:
-            note = None
-            await Actor.set_status_message(
-                f'Found {found} profiles for "{username}" ({high} high-confidence). Strongest first.')
+            who = checked[0]['username'] if len(checked) == 1 else f'{len(checked)} usernames'
+            headline = (f'Found {totals["profiles"]} profiles for {who} across {sites_per_username} sites: '
+                        f'{totals["high"]} high, {totals["medium"]} medium, {totals["low"]} low confidence. Strongest first.')
+        if notes:
+            headline += ' ' + ' '.join(notes)
 
-        await Actor.push_data({
+        summary = {
             'recordType': 'summary',
-            'username': username,
-            'mode': mode,
-            'method': input_data.get('method', 'find'),
-            'filter': input_data.get('filter', 'good'),
-            'top': input_data.get('top'),
-            'sitesChecked': len(detected) + len(unknown) + len(failed),
-            'profilesFound': found,
-            'highConfidence': tier_counts['high'],
-            'mediumConfidence': tier_counts['medium'],
-            'lowConfidence': tier_counts['low'],
-            'profilesUnknown': len(unknown),
-            'profilesFailed': len(failed),
-            'duration': round(wall_duration, 2),
-            'cmd': ' '.join(cmd),
-            'success': True,
-            'foundAnything': found > 0,
-            'message': note,
-            'timestamp': timestamp,
-        })
+            'usernames': [t['handle'] for t in targets],
+            'usernamesRequested': len(targets),
+            'usernamesChecked': len(checked),
+            'sitesPerUsername': sites_per_username,
+            'filters': selection['filters'],
+            'confidenceFilter': confidence_filter,
+            'profilesFound': totals['profiles'],
+            'highConfidence': totals['high'],
+            'mediumConfidence': totals['medium'],
+            'lowConfidence': totals['low'],
+            'sitesFailed': totals['failed'],
+            'sitesUnclear': totals['unknown'],
+            'durationSeconds': duration,
+            'perUsername': per_username,
+            'notes': notes,
+            'message': headline,
+            'success': tool_errors < len(targets),
+            'checkedAt': checked_at,
+        }
+        await Actor.push_data(summary)
+        await Actor.set_value('OUTPUT', summary)
+        await safe_status(headline[:500])
+        Actor.log.info(headline)
 
-        Actor.log.info(f'Scan complete: {found} profiles ({high} high-confidence) for "{username}" in {wall_duration:.1f}s')
+        if tool_errors and tool_errors == len(targets):
+            await Actor.fail(status_message=headline[:500])
 
 
 if __name__ == '__main__':

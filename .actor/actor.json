@@ -2,10 +2,14 @@
     "actorSpecification": 1,
     "name": "social-analyzer",
     "title": "Social Analyzer - Find Social Profiles by Username",
-    "description": "Find someone's social media profiles from just a username, across 900+ sites. Paste a handle or a profile link (we clean it), get confidence-ranked results. No login, no cookies, no API key. Clean per-profile export for recruiting, fraud checks, and people search.",
+    "description": "Find someone's public profiles from a username, or a list of them, across 900+ sites. Paste a handle, an @handle or a profile link. Filter by site category, country or named sites. Every hit is ranked high, medium or low confidence. No login, no cookies, no API key.",
     "version": "1.0",
     "buildTag": "latest",
-    "categories": ["LEAD_GENERATION", "DEVELOPER_TOOLS", "AUTOMATION"],
+    "categories": [
+        "LEAD_GENERATION",
+        "DEVELOPER_TOOLS",
+        "AUTOMATION"
+    ],
     "input": "./INPUT_SCHEMA.json",
     "output": "./output_schema.json",
     "dockerfile": "../Dockerfile",
@@ -13,39 +17,128 @@
     "storages": {
         "dataset": {
             "actorSpecification": 1,
-            "title": "Social Analyzer Results",
+            "title": "Social Analyzer results",
+            "description": "One row per profile found, plus one summary row per run (recordType = summary).",
             "views": {
                 "profiles": {
-                    "title": "Detected Profiles",
+                    "title": "Profiles found",
+                    "description": "Every profile that matched, strongest first. Confidence: high means the site clearly recognised the handle, medium is likely, low is a guess worth a manual check.",
                     "transformation": {
-                        "fields": ["username", "platform", "link", "confidence", "rate", "country", "type", "timestamp"]
+                        "fields": [
+                            "username",
+                            "platform",
+                            "link",
+                            "confidence",
+                            "matchRate",
+                            "category",
+                            "country",
+                            "adultSite",
+                            "pageTitle"
+                        ],
+                        "flatten": []
                     },
                     "display": {
                         "component": "table",
                         "properties": {
-                            "username":   { "label": "Username",   "format": "text" },
-                            "platform":   { "label": "Platform",   "format": "text" },
-                            "link":       { "label": "URL",        "format": "link" },
-                            "confidence": { "label": "Confidence", "format": "text" },
-                            "rate":       { "label": "Match rate", "format": "text" },
-                            "country":    { "label": "Country",    "format": "text" },
-                            "type":       { "label": "Category",   "format": "text" }
+                            "username": {
+                                "label": "Username",
+                                "format": "text"
+                            },
+                            "platform": {
+                                "label": "Platform",
+                                "format": "text"
+                            },
+                            "link": {
+                                "label": "Profile URL",
+                                "format": "link"
+                            },
+                            "confidence": {
+                                "label": "Confidence",
+                                "format": "text"
+                            },
+                            "matchRate": {
+                                "label": "Match %",
+                                "format": "number"
+                            },
+                            "category": {
+                                "label": "Category",
+                                "format": "text"
+                            },
+                            "country": {
+                                "label": "Site country",
+                                "format": "text"
+                            },
+                            "adultSite": {
+                                "label": "Adult site",
+                                "format": "boolean"
+                            },
+                            "pageTitle": {
+                                "label": "Page title",
+                                "format": "text"
+                            }
                         }
                     }
                 },
                 "summary": {
-                    "title": "Run Summary",
+                    "title": "Run summary",
+                    "description": "What was checked and what came back, in one row. The same object is saved as the OUTPUT record of the run's key-value store.",
                     "transformation": {
-                        "fields": ["recordType", "username", "mode", "sitesChecked", "profilesFound", "duration", "timestamp"]
+                        "fields": [
+                            "usernames",
+                            "usernamesChecked",
+                            "sitesPerUsername",
+                            "profilesFound",
+                            "highConfidence",
+                            "mediumConfidence",
+                            "lowConfidence",
+                            "sitesFailed",
+                            "durationSeconds",
+                            "message"
+                        ]
                     },
                     "display": {
                         "component": "table",
                         "properties": {
-                            "username":      { "label": "Username",     "format": "text" },
-                            "mode":          { "label": "Mode",         "format": "text" },
-                            "sitesChecked":  { "label": "Sites",        "format": "number" },
-                            "profilesFound": { "label": "Found",        "format": "number" },
-                            "duration":      { "label": "Duration (s)", "format": "number" }
+                            "usernames": {
+                                "label": "Usernames",
+                                "format": "array"
+                            },
+                            "usernamesChecked": {
+                                "label": "Checked",
+                                "format": "number"
+                            },
+                            "sitesPerUsername": {
+                                "label": "Sites each",
+                                "format": "number"
+                            },
+                            "profilesFound": {
+                                "label": "Profiles",
+                                "format": "number"
+                            },
+                            "highConfidence": {
+                                "label": "High",
+                                "format": "number"
+                            },
+                            "mediumConfidence": {
+                                "label": "Medium",
+                                "format": "number"
+                            },
+                            "lowConfidence": {
+                                "label": "Low",
+                                "format": "number"
+                            },
+                            "sitesFailed": {
+                                "label": "Sites unreachable",
+                                "format": "number"
+                            },
+                            "durationSeconds": {
+                                "label": "Seconds",
+                                "format": "number"
+                            },
+                            "message": {
+                                "label": "What happened",
+                                "format": "text"
+                            }
                         }
                     }
                 }

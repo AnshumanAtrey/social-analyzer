@@ -1,5 +1,57 @@
 # Changelog
 
+## [1.1.0] - 2026-09-12 (local, not yet deployed)
+
+Driven by the Debugging data of the week of 2026-09-05: 11 of 45 user runs failed, and
+the causes were not what the success rate suggested.
+
+### Fixed
+- Runs started through Apify's AI channel (`meta.origin = APIFY_AI`) no longer fail at the
+  end. SDK 3.x validates the run object against an enum that does not know that origin and
+  raised inside `Actor.set_status_message` after all rows were pushed; 8 finished runs a
+  week were marked FAILED. The status call is now wrapped and can never fail the run.
+- Several usernames in one run are searched one by one. The scanner treats "alice bob" as a
+  single handle containing a space and reported `instagram.com/alice bob` as found; a
+  six-username comma list from a real user returned nothing for that reason.
+- Email addresses typed into the username box (3 failed runs from one user in 5 days) are
+  no longer an error: the part before the @ is searched and the summary points to
+  holehe-email-osint for the address itself.
+- Category and country filters work again. The scanner's own `--type` and `--countries`
+  options select zero sites in version 0.45, so the filters are applied here from the
+  scanner's sites.json and passed down as `--websites`. The "Dating" filter a user tried
+  now checks 48 adult and dating sites instead of none.
+- `slow` and `special` scan modes removed from the form: both return no data in the current
+  scanner. A legacy `mode` value in API input is accepted and noted, and the fast scan runs.
+- Time limit is respected: usernames that cannot start before the limit are listed in the
+  summary instead of the platform killing the run with nothing written.
+
+### Added
+- `usernames` list field for bulk input (up to 25 per run), alongside `username`.
+- `excludeAdult` checkbox (48 sites) for hiring, brand and family checks.
+- Every profile row carries `platform`, `site`, `category`, `categoryDetail`, `country`,
+  `adultSite`, `siteRank`, `matchRate` and `pageTitle`; the scanner itself only returns
+  link, rate, title and text.
+- One summary row per run with per-username results, the filters applied, notes about
+  cleaned or skipped input, and the plain-language message also shown as the run status.
+  The same object is saved as the `OUTPUT` record for API and agent users.
+- Named-site input accepts any of the 999 sites by domain or partial name; unknown names
+  are reported with close matches.
+- Category dropdown built from the scanner's data, with site counts per category.
+- Unit tests for input cleaning, site selection, enrichment and the status-message guard
+  (`python3 test_unit.py`), plus a two-site real scan when the CLI is installed.
+
+### Changed
+- Input form regrouped into "Who to look up", "Where to look", "Results", "Limits"; every
+  title and description rewritten in plain words with the technical detail second.
+- Dataset views show platform, profile URL, confidence, match %, category, site country and
+  adult flag; the always-empty status, language and rank columns are gone.
+- `trim` is always on and no longer a field; `method` is no longer a field (found profiles
+  are always what is returned).
+- `siteType` values are now category slugs and `countries` values are country names, both
+  chosen from dropdowns. A saved task or API call that still sends the old free-text values
+  (`Dating`, `gb`) is rejected by the platform's input validation before the run starts:
+  pick the category or country again.
+
 ## [1.0.1] - 2026-06-30
 
 ### Added

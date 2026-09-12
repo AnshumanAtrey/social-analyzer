@@ -7,13 +7,13 @@
         "profiles": {
             "type": "string",
             "title": "Profiles found (dataset)",
-            "description": "One row per matched profile: username, platform, site, link, confidence (high/medium/low), matchRate, category, categoryDetail, country, adultSite, siteRank, pageTitle, pageText, language, metadata (meta tags of confident profiles), extracted, checkedAt. Every run checks all 999 sites unless narrowed. The last row (recordType = summary) holds the run totals, sites with no profile, sites that did not answer, and per-username notes.",
+            "description": "One row per matched profile: username, platform, site, link, confidence (high/medium/low), matchRate, category, categoryDetail, country, adultSite, siteRank, pageTitle, pageText, language, metadata (meta tags of confident profiles), extracted, checkedAt. Every run checks all 999 sites unless narrowed. Rows arrive step by step, about 250 sites at a time, and each step is charged when its rows are delivered. The last row (recordType = summary) holds the run totals, sites with no profile, sites that did not answer, and per-username notes.",
             "template": "{{links.apiDefaultDatasetUrl}}/items"
         },
         "summary": {
             "type": "string",
             "title": "Run summary (JSON)",
-            "description": "Totals, filters applied, per-username results, notes about cleaned or skipped input, and the plain-language message shown as the run status.",
+            "description": "While the run is going this record holds status 'running', percentDone and per-username progress, refreshed after every step of about 250 sites. When the run ends it becomes the full summary: status 'finished', totals, filters, settings used, per-username results, notes, and the plain-language message also shown as the run status.",
             "template": "{{links.apiDefaultKeyValueStoreUrl}}/records/OUTPUT"
         },
         "log": {

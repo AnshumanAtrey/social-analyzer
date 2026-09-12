@@ -1,0 +1,36 @@
+{
+  "$comment": "Store listing fields that apify push never sends. Applied by scripts/store-metadata.mjs after every deploy. Title, description and categories live in actor.json.",
+  "seoTitle": "Social Analyzer - Find Social Media by Username | Sherlock",
+  "seoDescription": "Find someone's social media profiles from a username, across 900+ sites. Confidence-ranked, no login or API key. Paste a handle or link, we clean it. For recruiting, fraud checks, people search.",
+  "exampleRunInput": {
+    "username": "elonmusk"
+  },
+  "actorPermissionLevel": "LIMITED_PERMISSIONS",
+  "isPublic": true,
+  "defaultRunOptions$comment": "Full-depth default (all 999 sites, 60 scanner workers, two chunks in flight) took 125 s locally; 2 GB gives CPU headroom so the daily Store test stays under 5 minutes. Timeout 3600 matches the input's one-hour maximum; 25 usernames at full depth need about 75 minutes, so the form tells users to lower the site count for big lists.",
+  "defaultRunOptions": {
+    "build": "latest",
+    "memoryMbytes": 2048,
+    "timeoutSecs": 3600
+  },
+  "pricing": {
+    "apply": true,
+    "$comment": "v1.1.0 moves charging from apify-default-dataset-item ($0.005 per row incl. the summary) to a custom 'profile' event at the same $0.005, charged per step as rows are delivered; the summary row becomes free. Adding an event is a model change the CI script will not automate: apply this record via API at deploy time (PUT pricingInfos, append), then the script sees a match. Event name must equal PROFILE_EVENT in src/main.py.",
+    "pricingInfos": [
+      {
+        "pricingModel": "PAY_PER_EVENT",
+        "apifyMarginPercentage": 0.2,
+        "reasonForChange": "Same $0.005 per profile found, now charged step by step as rows are delivered instead of per dataset row; the summary row is free and cut-off runs pay only for what arrived.",
+        "pricingPerEvent": {
+          "actorChargeEvents": {
+            "profile": {
+              "eventTitle": "Profile found",
+              "eventDescription": "One profile row: platform, URL, confidence, match rate, site category and country, page title, language and meta tags. Charged as each step of the scan delivers its rows. The summary row is free.",
+              "eventPriceUsd": 0.005
+            }
+          }
+        }
+      }
+    ]
+  }
+}

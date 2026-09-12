@@ -1,7 +1,7 @@
 {
     "actorSpecification": 1,
     "name": "social-analyzer",
-    "title": "Social Analyzer - Find Social Profiles by Username",
+    "title": "Social Media Finder - Social Analyzer | Username 900+ Sites",
     "description": "Find someone's public profiles from a username, or a list of them, across all 999 sites the scanner knows, every run. Paste a handle, an @handle or a profile link. Filter by category, country or named sites. Every hit ranked high, medium or low confidence with page details. No login, no API key.",
     "version": "1.0",
     "buildTag": "latest",

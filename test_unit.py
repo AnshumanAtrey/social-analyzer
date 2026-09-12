@@ -36,7 +36,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.main import (  # noqa: E402
     build_command, parse_output, parse_usernames, clean_handle, category_of, host_of,
     platform_name, select_sites, enrich, confidence_tier, parse_rate, safe_status,
-    keep_by_confidence, clean_value, resolve_settings, MAX_SETTINGS, CATEGORY_TITLES, MAX_USERNAMES, SCANNER_FIELDS,
+    keep_by_confidence, clean_value, resolve_settings, chunked, progress_line, MAX_SETTINGS, CATEGORY_TITLES,
+    MAX_USERNAMES, SCANNER_FIELDS, CHUNK_SIZE,
 )
 
 passed = 0
@@ -200,6 +201,15 @@ assert st == {'top': 100, 'filter': 'good', 'extract': False, 'metadata': False,
 st = resolve_settings({'top': 0, 'filter': 'weird', 'timeout': 5, 'extract': 'yes'})
 assert st['top'] == 999 and st['filter'] == 'all' and st['timeout'] == 60 and st['extract'] is True, st
 ok('resolve_settings: a bare username gets all 999 sites, every match, extraction, metadata and an hour; explicit values win; junk falls back to max')
+
+# 8c. chunking + progress wording -------------------------------------------------------
+assert chunked(list(range(7)), 3) == [[0, 1, 2], [3, 4, 5], [6]] and chunked([], 3) == []
+assert len(chunked(list(range(998)), CHUNK_SIZE)) == 8
+line = progress_line(500, 998, 0, 1, 143, 'elonmusk')
+assert line.startswith('50% done: 500 of 998 site checks, 143 profiles so far.') and 'elonmusk' in line, line
+line = progress_line(1247, 2994, 1, 3, 200, 'kaytats')
+assert line.startswith('41% done') and '1 of 3 usernames finished' in line and 'now checking kaytats' in line, line
+ok('chunked + progress_line: 998 sites -> 8 steps; status line shows percent, site checks, profiles, usernames')
 
 # 9. summary invariants (documented shape) -------------------------------------------
 sample = json.loads(json.dumps({'recordType': 'summary', 'usernames': ['a'], 'profilesFound': 0, 'message': 'x', 'perUsername': []}))

@@ -37,7 +37,7 @@ The scanner underneath is qeeqbox/social-analyzer (3,000+ GitHub stars). This ac
 
 | Event | Price | When it is charged |
 |---|---|---|
-| `Profile Record` | $0.005 | Per row in the dataset: each profile found, plus one summary row per run |
+| `Profile found` | $0.005 | Per profile row, charged as each step of the scan delivers its rows. The summary row is free. |
 
 Typical runs:
 
@@ -48,7 +48,7 @@ Typical runs:
 | Two usernames on the 48 adult and dating sites, 16 profiles (a real run) | $0.09 |
 | 25 usernames, 100 sites each, about 30 profiles each | $3.76 |
 
-A run that finds nothing costs $0.005 for the summary row. Runs stopped by your own input (no username, filters that match no site) cost nothing.
+A run that finds nothing costs nothing. Runs stopped by your own input (no username, filters that match no site) cost nothing. If a run is cut off by the time limit or your spending limit, you keep and pay for only the rows delivered before the cut.
 
 ## Which inputs does it take?
 
@@ -68,6 +68,10 @@ A run that finds nothing costs $0.005 for the summary row. Runs stopped by your 
 Filters combine. With a category or country filter, `top` picks the most popular sites inside that filter. With `websites`, `top` is ignored.
 
 **Nothing is held back.** The scanner offers three modes; only `fast` has code behind it in the current version, and its internal "extreme" level is a stricter gate that returns fewer hits, not a deeper scan. So every run already uses the deepest configuration that exists: all sites, all fields, the permissive level. The only feature not exposed is profile screenshots, which needs a Chrome browser the image does not carry.
+
+## How do I follow a run?
+
+The status line at the top of the run updates after every step: `48% done: 500 of 998 site checks, 143 profiles so far. 1 of 3 usernames finished, now checking kaytats.` Rows appear in the dataset as each step (about 250 sites) finishes, so you can start reading results after about 30 seconds. The `OUTPUT` record carries `status`, `percentDone` and per-username progress while the run is going, and turns into the final summary when it ends.
 
 ## What does the output look like?
 
@@ -139,6 +143,8 @@ The summary row (also saved as the `OUTPUT` record) from the same email run:
 **Q: Some results are wrong.** Sites that answer with a normal page for any handle produce medium matches. Stay on "Confident matches only" for clean lists, and check medium rows by hand.
 
 **Q: Does it check dating and adult sites?** Yes, always. The scanner's list has 48 of them and they are part of every run; the `adultSite` column marks those rows, and the "Adult and dating sites" category checks only them.
+
+**Q: Can I see progress, or get results before the run ends?** Yes. The status line shows the percentage done and the counts, rows arrive step by step, and the `OUTPUT` record has `percentDone` for API users. You pay per step as its rows are delivered, never for work that was cut off.
 
 **Q: Where did slow and special modes go?** The scanner's command line only has code for `fast`; `slow` and `special` return nothing in version 0.45. Every run here is already the deepest scan that exists (all 999 sites, every field). API calls that still send `mode` run normally and the summary says so.
 

@@ -26,6 +26,13 @@ the causes were not what the success rate suggested.
   summary instead of the platform killing the run with nothing written.
 
 ### Added
+- Progress and chunked delivery. Each username is scanned in steps of about 250 sites,
+  two at a time; after every step the rows are pushed, the run's status line is updated
+  with the percentage and counts, and the OUTPUT record carries `status: running` and
+  `percentDone`. A run cut off by the time or spending limit keeps what was delivered.
+- Charging moved from the platform's default dataset-item event to a custom `profile`
+  event at the same $0.005, charged per step as rows land; the summary row is free.
+  Requires the pricing record to name the `profile` event at deploy time.
 - Every run is the deepest scan the scanner can do: all 999 sites by default (was 100),
   every output field it can emit (status, type, country, language, rank, metadata,
   extracted), 60 parallel workers through `src/scan.py` instead of the hardcoded 15

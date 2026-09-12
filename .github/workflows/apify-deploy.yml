@@ -42,3 +42,11 @@ jobs:
         run: |
           echo "build ${{ steps.push.outputs.build-number }} -> ${{ steps.push.outputs.build-status }}"
           test "${{ steps.push.outputs.build-status }}" = "SUCCEEDED"
+
+      # apify push never updates the Store listing of an existing Actor (title,
+      # description, SEO fields, categories, permissions, example input, run
+      # defaults). This keeps GitHub the source of truth for the listing too.
+      - name: Sync Store listing metadata
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: node scripts/store-metadata.mjs

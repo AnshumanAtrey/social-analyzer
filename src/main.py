@@ -43,6 +43,10 @@ from apify import Actor
 
 TOOL = 'social-analyzer'
 SCANNER_WORKERS = 60          # the CLI hardcodes 15; 60 does all 999 sites in about 2 minutes
+CHUNK_SIZE = 125              # sites per scanner process; each chunk is a visible step with its own rows
+PARALLEL_CHUNKS = 8           # all steps of a full scan in flight at once: the scanner's own retry rounds
+                              # dominate a process's wall time, so splitting saves nothing unless steps overlap
+PROFILE_EVENT = 'profile'     # pay-per-event name for one profile row; the summary row is free
 SCANNER_FIELDS = 'link,rate,title,text,status,type,country,language,rank,extracted,metadata'
 MAX_USERNAMES = 25            # one scanner run per username
 MIN_SECONDS_PER_USERNAME = 20  # do not start a handle we cannot finish
@@ -412,6 +416,21 @@ def clean_value(v):
     return None if v in (None, '', 'unavailable') else v
 
 
+def chunked(items: list, size: int) -> list[list]:
+    """[1..7], 3 -> [[1,2,3],[4,5,6],[7]]."""
+    return [items[i:i + size] for i in range(0, len(items), size)] if items else []
+
+
+def progress_line(done_sites: int, total_sites: int, usernames_done: int, usernames_total: int,
+                  profiles: int, current: str | None) -> str:
+    """One sentence for the run's status message while the scan is running."""
+    pct = int(100 * done_sites / total_sites) if total_sites else 0
+    who = f'{usernames_done} of {usernames_total} usernames finished' if usernames_total > 1 else current or ''
+    now = f', now checking {current}' if current and usernames_total > 1 else ''
+    return (f'{pct}% done: {done_sites:,} of {total_sites:,} site checks, {profiles} profiles so far. '
+            f'{who}{now}.').replace(' .', '.').replace('..', '.')
+
+
 def enrich(profile: dict, username: str, site_index: dict[str, dict], checked_at: str) -> dict:
     link = profile.get('link') or ''
     host = host_of(link) if link else ''
@@ -542,66 +561,113 @@ async def main() -> None:
         skipped_for_time: list[str] = []
         tool_errors = 0
 
+        total_units = sites_per_username * len(targets)
+        done_units = 0
+        limit_reached = False
+
+        def push_progress(current: str | None) -> None:
+            line = progress_line(done_units, total_units, len(per_username), len(targets), totals['profiles'], current)
+            Actor.log.info(line)
+            return line
+
+        async def run_chunk(username: str, urls: list[str] | None, remaining: float) -> tuple[dict | None, float]:
+            cmd = build_command(username, top=top, site_urls=urls, extract=extract, metadata=metadata)
+            t0 = time.monotonic()
+            try:
+                result = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=max(10, remaining))
+            except subprocess.TimeoutExpired:
+                return None, time.monotonic() - t0
+            noise = ('REPLACEMENT CHARACTER', 'XMLParsedAsHTMLWarning', 'warnings.filterwarnings', 'import warnings',
+                     'BeautifulSoup(', 'from bs4 import')
+            for line in [l for l in result.stderr.splitlines() if l.strip() and not any(n in l for n in noise)][-3:]:
+                Actor.log.warning(f'{username}: {line[:300]}')
+            parsed = parse_output(result.stdout)
+            parsed['_exit'] = result.returncode
+            return parsed, time.monotonic() - t0
+
         for i, t in enumerate(targets, 1):
             username = t['handle']
+            if limit_reached:
+                skipped_for_time.append(username)
+                continue
             remaining = deadline - time.monotonic()
             if remaining < MIN_SECONDS_PER_USERNAME:
                 skipped_for_time.append(username)
                 continue
-            cmd = build_command(username, top=top, site_urls=site_urls, extract=extract, metadata=metadata)
-            Actor.log.info(f'[{i}/{len(targets)}] {username}: checking {sites_per_username} sites')
-            t0 = time.monotonic()
+            chunks = chunked(site_urls, CHUNK_SIZE) if site_urls else [None]   # None = scanner's own top N
             entry = {'username': username, 'original': t['original'], 'fromEmail': t['fromEmail'],
-                     'sitesChecked': sites_per_username, 'profilesFound': 0, 'high': 0, 'medium': 0,
-                     'low': 0, 'sitesNotFound': 0, 'sitesFailed': 0, 'seconds': 0.0, 'note': None}
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=max(10, remaining))
-            except subprocess.TimeoutExpired:
-                entry['note'] = f'did not finish within the time limit ({int(remaining)} s left); no results for this username'
-                entry['seconds'] = round(time.monotonic() - t0, 1)
-                per_username.append(entry)
-                Actor.log.warning(f'{username}: {entry["note"]}')
-                continue
-            entry['seconds'] = round(time.monotonic() - t0, 1)
-            noise = ('REPLACEMENT CHARACTER', 'XMLParsedAsHTMLWarning', 'warnings.filterwarnings', 'import warnings',
-                     'BeautifulSoup(', 'from bs4 import')
-            for line in [l for l in result.stderr.splitlines() if l.strip() and not any(n in l for n in noise)][-5:]:
-                Actor.log.warning(f'{username}: {line[:300]}')
+                     'sitesChecked': 0, 'profilesFound': 0, 'high': 0, 'medium': 0, 'low': 0,
+                     'sitesNotFound': 0, 'sitesFailed': 0, 'seconds': 0.0, 'note': None}
+            Actor.log.info(f'[{i}/{len(targets)}] {username}: {sites_per_username} sites in {len(chunks)} step(s)')
+            await safe_status(push_progress(username))
+            t_user = time.monotonic()
+            chunk_errors = 0
+            sem = asyncio.Semaphore(PARALLEL_CHUNKS)
 
-            parsed = parse_output(result.stdout)
-            if 'parse_error' in parsed:
+            async def bounded(urls):
+                async with sem:
+                    remaining_now = deadline - time.monotonic()
+                    if remaining_now < 15:
+                        return urls, None, 0.0
+                    parsed, secs = await run_chunk(username, urls, remaining_now)
+                    return urls, parsed, secs
+
+            tasks = [asyncio.ensure_future(bounded(urls)) for urls in chunks]
+            for fut in asyncio.as_completed(tasks):
+                urls, parsed, secs = await fut
+                size = len(urls) if urls else top
+                done_units += size
+                if parsed is None:
+                    entry['note'] = f'stopped after {entry["sitesChecked"]} of {sites_per_username} sites: time limit reached'
+                    continue
+                if 'parse_error' in parsed:
+                    chunk_errors += 1
+                    Actor.log.error(f'{username}: a step returned no data (exit {parsed.get("_exit")}, {parsed["parse_error"]})')
+                    continue
+                if limit_reached:
+                    continue
+                detected_all = parsed.get('detected') or []
+                detected = keep_by_confidence(detected_all, confidence_filter)
+                detected.sort(key=lambda p: parse_rate(p.get('rate')) or 0, reverse=True)
+                rows = [enrich(p, username, site_index, checked_at) for p in detected]
+                if rows:
+                    res = await Actor.push_data(rows, charged_event_name=PROFILE_EVENT)
+                    if getattr(res, 'event_charge_limit_reached', False):
+                        limit_reached = True
+                entry['sitesChecked'] += size
+                entry['sitesFailed'] += len(parsed.get('failed') or [])
+                entry['sitesNotFound'] += len(parsed.get('unknown') or []) + (len(detected_all) - len(detected))
+                entry['profilesFound'] += len(rows)
+                for r in rows:
+                    entry[r['confidence'] if r['confidence'] in ('high', 'medium', 'low') else 'low'] += 1
+                totals['profiles'] += len(rows)
+                for k in ('high', 'medium', 'low'):
+                    totals[k] = sum(e[k] for e in per_username) + entry[k]
+                totals['failed'] = sum(e['sitesFailed'] for e in per_username) + entry['sitesFailed']
+                totals['unknown'] = sum(e['sitesNotFound'] for e in per_username) + entry['sitesNotFound']
+                await safe_status(push_progress(username))
+                await Actor.set_value('OUTPUT', {'status': 'running', 'percentDone': int(100 * done_units / total_units) if total_units else 0,
+                                                 'message': progress_line(done_units, total_units, len(per_username), len(targets), totals['profiles'], username),
+                                                 'perUsername': per_username + [entry]})
+            entry['seconds'] = round(time.monotonic() - t_user, 1)
+            if chunk_errors == len(chunks):
                 tool_errors += 1
-                entry['note'] = (f'the scanner returned no data (exit code {result.returncode}, {parsed["parse_error"]}). '
-                                 f'Usually a temporary problem; run this username again.')
-                Actor.log.error(f'{username}: {entry["note"]}')
-                per_username.append(entry)
-                continue
-
-            detected = keep_by_confidence(parsed.get('detected') or [], confidence_filter)
-            entry['sitesFailed'] = len(parsed.get('failed') or [])
-            entry['sitesNotFound'] = len(parsed.get('unknown') or []) + (len(parsed.get('detected') or []) - len(detected))
-            detected.sort(key=lambda p: parse_rate(p.get('rate')) or 0, reverse=True)
-            rows = [enrich(p, username, site_index, checked_at) for p in detected]
-            if rows:
-                await Actor.push_data(rows)
-            for r in rows:
-                entry[r['confidence'] if r['confidence'] in ('high', 'medium', 'low') else 'low'] += 1
-            entry['profilesFound'] = len(rows)
-            totals['profiles'] += len(rows)
-            for k in ('high', 'medium', 'low'):
-                totals[k] += entry[k]
-            totals['failed'] += entry['sitesFailed']
-            totals['unknown'] += entry['sitesNotFound']
-            if not rows:
+                entry['note'] = ('the scanner returned no data for this username. Usually a temporary problem; run it again.')
+            elif entry['profilesFound'] == 0 and entry['note'] is None:
                 entry['note'] = 'no profile with this exact handle on the sites checked (or none above your confidence setting)'
+            if limit_reached and entry['note'] is None:
+                entry['note'] = f'stopped after {entry["sitesChecked"]} of {sites_per_username} sites: your spending limit for this run was reached'
             per_username.append(entry)
-            Actor.log.info(f'{username}: {len(rows)} profiles ({entry["high"]} high confidence) in {entry["seconds"]}s')
+            Actor.log.info(f'{username}: {entry["profilesFound"]} profiles ({entry["high"]} high) on {entry["sitesChecked"]} sites in {entry["seconds"]}s')
 
-        # ---- summary: one row (charged like a profile row) and one free OUTPUT record
+        # ---- summary: one free row and the final OUTPUT record
         duration = round(time.monotonic() - started, 1)
-        checked = [e for e in per_username if e['note'] is None or e['note'].startswith('no profile')]
-        timed_out = [e['username'] for e in per_username if e['note'] and e['note'].startswith('did not finish')]
-        if skipped_for_time:
+        checked = [e for e in per_username if e['note'] is None or e['note'].startswith('no profile') or e['note'].startswith('stopped after')]
+        timed_out = [e['username'] for e in per_username if e['note'] and 'time limit' in e['note']]
+        if skipped_for_time and limit_reached:
+            notes.append(f'Your spending limit for this run was reached before {len(skipped_for_time)} username(s) could start: '
+                         f'{", ".join(skipped_for_time)}. Raise the limit or run them separately.')
+        elif skipped_for_time:
             notes.append(f'Time limit reached before {len(skipped_for_time)} username(s) could start: '
                          f'{", ".join(skipped_for_time)}. Raise the time limit or check fewer sites.')
 
@@ -614,7 +680,7 @@ async def main() -> None:
         elif totals['profiles'] == 0 and timed_out:
             headline = (f'Time limit of {user_limit} s reached before {", ".join(timed_out)} finished on '
                         f'{sites_per_username} sites, so there is nothing to show. A full scan of all sites needs '
-                        f'about 3 minutes per username: raise the time limit or lower "How many sites to check".')
+                        f'about 2 to 3 minutes per username: raise the time limit or lower "How many sites to check".')
         elif totals['profiles'] == 0:
             headline = (f'No results. {tool_errors} of {len(targets)} username(s) could not be scanned; '
                         f'see the notes and run again.')
@@ -628,10 +694,13 @@ async def main() -> None:
 
         summary = {
             'recordType': 'summary',
+            'status': 'finished',
+            'percentDone': 100,
             'usernames': [t['handle'] for t in targets],
             'usernamesRequested': len(targets),
             'usernamesChecked': len(checked),
             'sitesPerUsername': sites_per_username,
+            'siteChecksDone': done_units,
             'filters': selection['filters'],
             'confidenceFilter': confidence_filter,
             'settings': settings,

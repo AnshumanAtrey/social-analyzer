@@ -7,7 +7,7 @@
     "username": {
       "title": "Username",
       "type": "string",
-      "description": "The handle to look up, for example elonmusk. You can paste @elonmusk or a profile link such as twitter.com/elonmusk, we take the handle out of it. Several at once: separate them with commas. If you paste an email address, we search the part before the @ and point you to the email tool.",
+      "description": "The handle to look up, for example elonmusk. You can paste @elonmusk or a profile link such as twitter.com/elonmusk, we take the handle out of it. Several at once: separate them with commas. If you paste an email address, we search the part before the @ and point you to the email tool. A full name such as John Smith is searched as johnsmith.",
       "editor": "textfield",
       "prefill": "elonmusk",
       "example": "elonmusk",
@@ -41,7 +41,7 @@
     "websites": {
       "title": "Only these sites",
       "type": "array",
-      "description": "Check only the sites you name, by domain: github.com, reddit.com, instagram.com. A partial name like github also works. Any of the 999 sites in the list is accepted; the run tells you if a name is not on it. When set, 'How many sites to check' is ignored.",
+      "description": "Check only the sites you name, by domain: github.com, reddit.com, instagram.com. A partial name like github also works. Any of the 999 sites in the list is accepted; the run tells you if a name is not on it, and if none is, this filter is left out. When set, 'How many sites to check' is ignored.",
       "editor": "stringList",
       "example": [
         "github.com",
@@ -92,7 +92,7 @@
     "countries": {
       "title": "Only sites from these countries",
       "type": "array",
-      "description": "Worldwide by default. Pick countries to check only sites based there (where the site is based, not where the person lives). Most sites in the list are American or Indian.",
+      "description": "Worldwide by default. Pick countries to check only sites based there (where the site is based, not where the person lives). Most sites in the list are American or Indian. If none of the sites your other filters pick is based there, this filter is left out and the run says so.",
       "editor": "select",
       "items": {
         "type": "string",

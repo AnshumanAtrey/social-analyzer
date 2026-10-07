@@ -10,7 +10,7 @@ Available as an [Apify Actor](https://apify.com/anshumanatrey/social-analyzer). 
 
 You give it one username, or a list, and nothing else is needed: with only the username set, the scan is the widest possible, all 999 sites, worldwide, every category, every match kept and labelled by confidence, page details and patterns extracted, one hour to do it. It checks those sites for a profile with exactly that handle and returns one row per profile it finds: the platform, the profile URL, how confident the match is, the site's category and country, the page title, its language and its meta tags. A summary row and an `OUTPUT` record say in plain words what was checked, how many sites had no profile, how many did not answer, and what came back.
 
-You can paste `@elonmusk` or a full profile link like `twitter.com/elonmusk`; the handle is taken out of it. If you paste an email address, the part before the `@` is searched and the run points you to the email tool for the address itself.
+You can paste `@elonmusk` or a full profile link like `twitter.com/elonmusk`; the handle is taken out of it. If you paste an email address, the part before the `@` is searched and the run points you to the email tool for the address itself. A full name like `John Smith` is searched as `johnsmith`, and the summary names `john.smith` and `john_smith` to try next.
 
 ## How is it different from Sherlock?
 
@@ -48,7 +48,7 @@ Typical runs:
 | Two usernames on the 48 adult and dating sites, 16 profiles (a real run) | $0.09 |
 | 25 usernames, 100 sites each, about 30 profiles each | $3.76 |
 
-A run that finds nothing costs nothing. Runs stopped by your own input (no username, filters that match no site) cost nothing. If a run is cut off by the time limit or your spending limit, you keep and pay for only the rows delivered before the cut.
+A run that finds nothing costs nothing. A form with no usable username stops before anything is charged. If your spending limit cannot pay for one profile, nothing is searched or charged and the status message gives the limit and the price. If a run is cut off by the time limit or your spending limit, you keep and pay for only the rows delivered before the cut.
 
 ## Which inputs does it take?
 
@@ -71,7 +71,7 @@ Filters combine. With a category or country filter, `top` picks the most popular
 
 ## How do I follow a run?
 
-The status line at the top of the run updates after every step: `48% done: 500 of 998 site checks, 143 profiles so far. 1 of 3 usernames finished, now checking kaytats.` Rows appear in the dataset as each step (about 250 sites) finishes, so you can start reading results after about 30 seconds. The `OUTPUT` record carries `status`, `percentDone` and per-username progress while the run is going, and turns into the final summary when it ends.
+The status line at the top of the run updates after every step: `48% done: 500 of 998 site checks, 143 profiles so far. 1 of 3 usernames finished, now checking kaytats.` Rows appear in the dataset as each step (about 125 sites) finishes, so you can start reading results after about 30 seconds. The `OUTPUT` record carries `status`, `percentDone` and per-username progress while the run is going, and turns into the final summary when it ends.
 
 ## What does the output look like?
 
@@ -132,11 +132,13 @@ The summary row (also saved as the `OUTPUT` record) from the same email run:
 
 ## Common questions
 
-**Q: I typed several usernames and got one weird result.** Separate them with commas or use the bulk list. Each username is checked on its own; a name with a space in it is rejected with a message, because usernames have no spaces.
+**Q: I typed several usernames and got one weird result.** Separate them with commas or use the bulk list. Each username is checked on its own. Usernames have no spaces, so a full name such as `John Smith` is searched as `johnsmith`, and the summary names `john.smith` and `john_smith` to add if you want those forms too.
 
 **Q: I pasted an email address.** The run searches the part before the `@` as a username and tells you so in the summary. To find which sites an email is registered on, use [holehe-email-osint](https://apify.com/anshumanatrey/holehe-email-osint).
 
-**Q: The category or country filter returned nothing.** The run stops with a message when your filters match no site, so you pay nothing. Loosen one filter. Category counts are shown in the dropdown; most sites in the list are American or Indian.
+**Q: I picked a category and a country that have no site in common.** Filters only narrow, so a filter that would leave nothing to check is left out and the run says so. None of the 48 adult and dating sites is based in India, for example, so all 48 are checked and the status message tells you where they are based. The same goes for a named site that is not in the list. Category counts are shown in the dropdown; most sites in the list are American or Indian.
+
+**Q: Can I run it with less memory?** Yes. Each step of the scan is its own process of about 300 MB, and the run starts as many at once as its memory holds: 8 at the default 4 GB, 5 at 2 GB, 2 at 1 GB. Less memory is slower, not broken. A step that still comes back empty is retried on its own, and any sites that could not be checked are counted in the summary (`sitesNotChecked`) with the reason, never reported as "no profile".
 
 **Q: My run found nothing.** The status message says so plainly, and the summary tells you how many sites had no profile and how many did not answer. Check the spelling, or switch to "Confident and possible matches" to see weaker matches. A handle that exists nowhere returns one summary row.
 

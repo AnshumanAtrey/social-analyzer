@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.2.0] - 2026-10-07: runs that used to fail now answer
+
+Apify flagged the Actor for reliability: 23 of 211 runs failed in the 30 days to 2026-10-07. 13 of them came before
+1.1.0; the other 10 were made by users who do not share their runs, so every path in the code that could fail a run
+with something to search was closed, and each one was run locally with the real SDK before release.
+
+### Changed
+- **A filter that would leave no site to check is left out instead of failing the run.** 208 of the 299 category and
+  country pairs in the form select no site (adult and dating sites based in India, gaming sites based in Angola), and
+  those runs ended FAILED with "Your filters match no sites". Now the country is left out, the category's sites are
+  checked, and the message says where they are based. The same holds for named sites none of which is in the list and
+  for a country no site is based in: options only narrow.
+- **A full name is searched as a handle.** "Lisa Vor" was skipped, and on its own failed the run, because usernames
+  have no spaces. It is now read as `lisavor` (two to four words of letters, accents dropped), and the summary names
+  `lisa.vor` and `lisa_vor` to add. One name costs what one username costs.
+- **Scan steps fit the run's memory.** Each step is its own scanner process of about 300 MB; 8 run at once at the
+  default 4 GB, 5 at 2 GB, 2 at 1 GB (8 at 2 GB peaked at 2046 MB and lost two steps to the OOM killer). A step that
+  comes back empty is retried alone after the others. Sites still not checked are counted in `sitesNotChecked`, with
+  the reason in the message, instead of disappearing from the totals.
+- **A spending limit that cannot pay for one profile ends the run as succeeded, with nothing searched or charged.**
+  The message gives both numbers ("this run's spending limit is $0.003, which cannot pay for one profile ($0.005)")
+  and `OUTPUT` says `not_run`. It used to run a full scan it could not deliver. A run timeout too short for one scan
+  is treated the same way.
+- **An unexpected error no longer loses the run.** Rows already saved stay, the summary and `OUTPUT` are written, and
+  the message names the error and any usernames that never started. The run fails only when nothing was saved.
+- **Every failed run writes `OUTPUT` with the reason** (a form with no usable username, a build without the scanner).
+- Rows the spending limit cut are no longer counted as found: the totals match what was delivered and charged.
+- Filter values of the wrong type are ignored instead of crashing the run; input that is not an object reads as no
+  input.
+
 ## [1.1.0] - 2026-09-13
 
 Driven by the Debugging data of the week of 2026-09-05: 11 of 45 user runs failed, and

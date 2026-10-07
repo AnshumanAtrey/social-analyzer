@@ -5,11 +5,13 @@ real scanner on 10 sites when it is installed, and is skipped otherwise.
 """
 import asyncio
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
 import types
+from decimal import Decimal
 
 # --- stub the SDK so the module imports without the platform ---------------------
 apify_stub = types.ModuleType('apify')
@@ -37,7 +39,8 @@ from src.main import (  # noqa: E402
     build_command, parse_output, parse_usernames, clean_handle, category_of, host_of,
     platform_name, select_sites, enrich, confidence_tier, parse_rate, safe_status,
     keep_by_confidence, clean_value, resolve_settings, chunked, progress_line, MAX_SETTINGS, CATEGORY_TITLES,
-    MAX_USERNAMES, SCANNER_FIELDS, CHUNK_SIZE,
+    MAX_USERNAMES, SCANNER_FIELDS, CHUNK_SIZE, handle_from_name, as_list, parallel_steps, step_failure, usd,
+    Delivery, PROFILE_EVENT,
 )
 
 passed = 0
@@ -73,9 +76,23 @@ assert len(targets) == 1 and targets[0]['handle'] == 'frostkatrina' and targets[
 ok('parse_usernames: an email becomes a search for its local part, flagged fromEmail')
 
 targets, problems = parse_usernames({'username': 'elonmusk', 'usernames': ['@ElonMusk', 'https://github.com/torvalds', 'jane doe', '']})
-assert [t['handle'] for t in targets] == ['elonmusk', 'torvalds'], targets
-assert any('jane doe' in p and 'space' in p for p in problems), problems
-ok('parse_usernames: merges both fields, drops case-duplicates, reports a name with a space')
+assert [t['handle'] for t in targets] == ['elonmusk', 'torvalds', 'janedoe'], targets
+assert targets[2]['fromName'] is True and targets[2]['alsoTry'] == ['jane.doe', 'jane_doe'] and targets[2]['original'] == 'jane doe'
+assert not targets[0]['fromName'] and problems == [], problems
+ok('parse_usernames: merges both fields, drops case-duplicates, reads a full name as its joined handle')
+
+# 2b. full names: the joined handle is searched, the other forms are named, never guessed from non-names
+assert handle_from_name('Lisa Vor') == ('lisavor', ['lisa.vor', 'lisa_vor'])
+assert handle_from_name('José García') == ('josegarcia', ['jose.garcia', 'jose_garcia'])
+assert handle_from_name("Mary-Jane O'Brien") == ('maryjaneobrien', ['maryjane.obrien', 'maryjane_obrien'])
+assert handle_from_name('Mary Ann Smith Jones')[0] == 'maryannsmithjones'
+for not_a_name in ('john doe 1985', 'a b c d e', 'foo/bar baz!!', 'Иван Петров', 'single', '+1 555 123 4567'):
+    assert handle_from_name(not_a_name) is None, not_a_name
+targets, problems = parse_usernames({'username': 'Lisa Vor'})
+assert [t['handle'] for t in targets] == ['lisavor'] and problems == [], (targets, problems)
+targets, problems = parse_usernames({'username': 'Lisa Vor, lisavor, @Lisa Vor, Lisa Vor.'})
+assert [t['handle'] for t in targets] == ['lisavor'], targets
+ok('handle_from_name: "Lisa Vor" -> lisavor (accents, hyphens, apostrophes, 2-4 words); phone numbers, junk and non-Latin names are not guessed')
 
 targets, problems = parse_usernames({'username': 'foo/bar baz!!'})
 assert targets == [] and problems and 'space' in problems[0], (targets, problems)
@@ -146,8 +163,27 @@ assert info.get('unknownCategory') == 'nonsense' and len(sel) == 5
 ok('select_sites: unknown category is reported and ignored instead of matching nothing')
 
 sel, info = select_sites({'countries': ['Mars']}, SITES, 100)
-assert sel == [] and info['sitesMatched'] == 0
-ok('select_sites: filters that match nothing return an empty list (the run explains and stops)')
+assert len(sel) == 5 and 'countries' not in info['filters'], (urls(sel), info)
+assert info['dropped'] and 'Mars' in info['dropped'][0] and 'left out' in info['dropped'][0] and 'United States' in info['dropped'][0], info
+ok('select_sites: a country no site is based in is left out with a note naming the countries that have sites')
+
+sel, info = select_sites({'siteType': 'adult_dating', 'countries': ['South Korea']}, SITES, 100)
+assert urls(sel) == ['https://fancentro.com/{username}'] and info['filters'] == {'category': 'adult_dating'}, (urls(sel), info)
+assert 'None of the 1 sites in "Adult and dating sites" is based in South Korea' in info['dropped'][0], info['dropped']
+ok('select_sites: a category and country pair with no site keeps the category and drops the country, with a note')
+
+sel, info = select_sites({'websites': ['myspace.com']}, SITES, 2)
+assert len(sel) == 2 and info['unknownSites'] == ['myspace.com'] and 'websites' not in info['filters'], (urls(sel), info)
+assert 'None of the sites you named' in info['dropped'][0]
+sel, info = select_sites({'websites': ['github'], 'siteType': 'adult_dating', 'countries': ['India']}, SITES, 100)
+assert urls(sel) == ['https://github.com/{username}'] and info['filters'] == {'websites': ['github']}, (urls(sel), info)
+assert len(info['dropped']) == 2 and 'category' in info['dropped'][0] and 'India' in info['dropped'][1], info['dropped']
+ok('select_sites: named sites that are all unknown, or that no other filter fits, never leave the scan empty')
+
+assert as_list(7) == [] and as_list({'a': 1}) == [] and as_list(None) == [] and as_list('us, in') == ['us', 'in']
+sel, info = select_sites({'websites': 42, 'siteCategory': ['x'], 'countries': {'a': 1}}, SITES, 100)
+assert len(sel) == 5 and info['filters'] == {} and not info['dropped'], info
+ok('select_sites: filter values of the wrong type are ignored instead of crashing the run')
 
 sel, info = select_sites({}, [], 100)
 assert sel is None and 'unavailable' in info['error']
@@ -191,6 +227,48 @@ ok('enrich: rows carry platform, site, confidence, category, country, adult flag
 # 8. safe_status never raises ---------------------------------------------------------
 asyncio.run(safe_status('Found 202 profiles'))
 ok('safe_status: a failing SDK status call is logged, not raised (the APIFY_AI crash)')
+
+# 8a. scan steps sized to the run's memory --------------------------------------------
+for memory, steps in [(None, 8), (8192, 8), (4096, 8), (2048, 5), (1024, 2), (512, 1), (128, 1)]:
+    apify_stub.Actor.config.memory_mbytes = memory
+    assert parallel_steps() == steps, (memory, parallel_steps(), steps)
+del apify_stub.Actor.config.memory_mbytes
+assert parallel_steps() == 8
+assert 'out of memory' in step_failure({'_exit': -9, 'parse_error': 'empty stdout'})
+assert step_failure({'_exit': 1, 'parse_error': 'empty stdout'}) == 'the scanner returned no data (exit 1, empty stdout)'
+ok('parallel_steps: 8 steps at 4 GB, 5 at 2 GB (8 peaked at 2046 MB there and lost two), 2 at 1 GB, never 0')
+
+
+# 8b. spending limit: a run that cannot pay for one profile searches nothing ------------
+class FakeCharging:
+    """The slice of the SDK's ChargingManager that Delivery uses (pay per event, $0.005 a profile)."""
+
+    def __init__(self, limit, price=Decimal('0.005')):
+        self.limit, self.price, self.charged = Decimal(str(limit)), price, Decimal(0)
+
+    def get_pricing_info(self):
+        return types.SimpleNamespace(is_pay_per_event=True, max_total_charge_usd=self.limit,
+                                     per_event_prices={PROFILE_EVENT: self.price})
+
+    def calculate_max_event_charge_count_within_limit(self, event_name):
+        return max(0, math.floor((self.limit - self.charged) / self.price))
+
+
+async def push_within_limit(rows, charged_event_name=None):
+    """What SDK 3.4.1 does: push and charge only the rows the remaining limit pays for."""
+    cm = apify_stub.Actor.cm
+    n = min(len(rows), cm.calculate_max_event_charge_count_within_limit(charged_event_name))
+    cm.charged += n * cm.price
+    return types.SimpleNamespace(charged_count=n, event_charge_limit_reached=n < len(rows))
+
+assert [usd(v) for v in (Decimal('0.003'), Decimal('0.005'), 5, 0, Decimal('2.76337'))] == ['$0.003', '$0.005', '$5', '$0', '$2.7634']
+assert not Delivery(FakeCharging('0.003')).can_pay() and Delivery(FakeCharging('0.005')).can_pay()
+assert Delivery(FakeCharging('0.003')).budget_note() == "this run's spending limit is $0.003, which cannot pay for one profile ($0.005)"
+apify_stub.Actor.cm = FakeCharging('0.012')
+apify_stub.Actor.push_data = push_within_limit
+d = Delivery(apify_stub.Actor.cm)
+assert asyncio.run(d.push([{'n': i} for i in range(5)])) == 2 and d.rows == 2 and d.limit and not d.can_pay()
+ok('Delivery: a limit below one profile ($0.003 < $0.005) is caught before any scan; rows past the limit are not counted as delivered')
 
 # 8b. username only -> everything at maximum -----------------------------------------
 st = resolve_settings({'username': 'elonmusk'})

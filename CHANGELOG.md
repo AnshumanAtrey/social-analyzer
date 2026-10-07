@@ -15,11 +15,12 @@ with something to search was closed, and each one was run locally with the real 
 - **A full name is searched as a handle.** "Lisa Vor" was skipped, and on its own failed the run, because usernames
   have no spaces. It is now read as `lisavor` (two to four words of letters, accents dropped), and the summary names
   `lisa.vor` and `lisa_vor` to add. One name costs what one username costs.
-- **Scan steps fit the run's memory.** Each step is its own scanner process of 300 to 450 MB (more when CPU is
-  short); 8 run at once at the default 4 GB, 4 at 2 GB, 1 at 1 GB. Measured on Apify: the old 8 at 2 GB peaked at
-  2046 MB and lost two steps to the OOM killer; 5 at 2 GB peaked at 1942 MB; 2 at 1 GB lost one. A step that comes
-  back empty is retried alone after the others. Sites still not checked are counted in `sitesNotChecked`, with the
-  reason in the message, instead of disappearing from the totals.
+- **Scan steps fit the run's memory.** Each step is its own scanner process of about 300 MB (more when CPU is
+  short); 8 run at once at the default 4 GB, 5 at 2 GB, 1 at 1 GB. Measured on Apify: the old 8 at 2 GB peaked at
+  2046 MB and lost two steps to the OOM killer; 5 at 2 GB peaked at 1907 to 1942 MB and finished in 113 s where 4
+  took 189 s side by side; 2 at 1 GB lost one step, 1 at a time lost none. A step that comes back empty is retried
+  alone after the others. Sites still not checked are counted in `sitesNotChecked`, with the reason in the message,
+  instead of disappearing from the totals.
 - **A spending limit that cannot pay for one profile ends the run as succeeded, with nothing searched or charged.**
   The message gives both numbers ("this run's spending limit is $0.003, which cannot pay for one profile ($0.005)")
   and `OUTPUT` says `not_run`. It used to run a full scan it could not deliver. A run timeout too short for one scan

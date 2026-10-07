@@ -33,11 +33,11 @@ Wraps the qeeqbox/social-analyzer CLI in fast mode and adds what real user runs
   against an enum that lacks the APIFY_AI run origin (runs started by Apify's AI
   chatbot); the message is stored server-side before that parse, so a parse error is
   logged, not raised.
-- Scan steps sized to the run's memory. Each step is its own scanner process of about
-  300 MB, so 8 run at once at the default 4 GB, 5 at 2 GB and 2 at 1 GB (eight at 2 GB
-  peaked at 2046 MB and lost two steps to the OOM killer). A step that still comes back
-  empty is retried alone after the others, and sites that could not be checked are
-  counted and explained in the summary, never reported as "no profile".
+- Scan steps sized to the run's memory. Each step is its own scanner process of 300 to
+  450 MB (more when CPU is short), so 8 run at once at the default 4 GB, 4 at 2 GB and 1
+  at 1 GB (eight at 2 GB peaked at 2046 MB and lost two steps to the OOM killer). A step
+  that still comes back empty is retried alone after the others, and sites that could not
+  be checked are counted and explained in the summary, never reported as "no profile".
 - The run fails only when there is nothing to search (no usable username), when every
   scan broke before saving anything, or on an unexpected error with nothing saved, and
   OUTPUT still says why. A spending limit too small for one profile, or a run timeout
@@ -66,8 +66,9 @@ SCANNER_WORKERS = 60          # the CLI hardcodes 15; 60 does all 999 sites in a
 CHUNK_SIZE = 125              # sites per scanner process; each chunk is a visible step with its own rows
 PARALLEL_CHUNKS = 8           # all steps of a full scan in flight at once: the scanner's own retry rounds
                               # dominate a process's wall time, so splitting saves nothing unless steps overlap
-STEP_MEMORY_MB = 360          # one step is its own scanner process: users' runs at 4 GB (2026-10-07) peaked at
-                              # 0.31-0.36 GB doing one step at a time and 2.3-2.6 GB doing eight
+STEP_MEMORY_MB = 450          # one step is its own scanner process, and it holds more while it waits for CPU (Apify
+                              # gives 1 vCPU per 4 GB): 8 at once peaked at 2591 MB at 4 GB, 5 at 1942 MB at 2 GB, and
+                              # 2 at 1 GB lost one to the OOM killer (build 1.0.13, 2026-10-07)
 BASE_MEMORY_MB = 200          # this process, plus headroom
 PROFILE_EVENT = 'profile'     # pay-per-event name for one profile row; the summary row is free
 SCANNER_FIELDS = 'link,rate,title,text,status,type,country,language,rank,extracted,metadata'
@@ -564,7 +565,7 @@ def seconds_left_in_run() -> float | None:
 
 
 def parallel_steps() -> int:
-    """How many scan steps fit in this run's memory at once: 8 at the default 4 GB, 5 at 2 GB, 2 at 1 GB.
+    """How many scan steps fit in this run's memory at once: 8 at the default 4 GB, 4 at 2 GB, 1 at 1 GB.
 
     Eight at 2 GB peaked at 2046 MB and two steps were OOM-killed (exit -9), losing 250
     sites (build 1.0.8 on Apify, 2026-09-12). Off the platform the memory is unknown: all 8.

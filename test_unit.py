@@ -229,14 +229,14 @@ asyncio.run(safe_status('Found 202 profiles'))
 ok('safe_status: a failing SDK status call is logged, not raised (the APIFY_AI crash)')
 
 # 8a. scan steps sized to the run's memory --------------------------------------------
-for memory, steps in [(None, 8), (8192, 8), (4096, 8), (2048, 5), (1024, 2), (512, 1), (128, 1)]:
+for memory, steps in [(None, 8), (8192, 8), (4096, 8), (3072, 6), (2048, 4), (1024, 1), (512, 1), (128, 1)]:
     apify_stub.Actor.config.memory_mbytes = memory
     assert parallel_steps() == steps, (memory, parallel_steps(), steps)
 del apify_stub.Actor.config.memory_mbytes
 assert parallel_steps() == 8
 assert 'out of memory' in step_failure({'_exit': -9, 'parse_error': 'empty stdout'})
 assert step_failure({'_exit': 1, 'parse_error': 'empty stdout'}) == 'the scanner returned no data (exit 1, empty stdout)'
-ok('parallel_steps: 8 steps at 4 GB, 5 at 2 GB (8 peaked at 2046 MB there and lost two), 2 at 1 GB, never 0')
+ok('parallel_steps: 8 steps at 4 GB, 4 at 2 GB (5 peaked at 1942 MB there), 1 at 1 GB (2 lost one to the OOM killer), never 0')
 
 
 # 8b. spending limit: a run that cannot pay for one profile searches nothing ------------

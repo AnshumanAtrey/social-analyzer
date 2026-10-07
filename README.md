@@ -138,7 +138,7 @@ The summary row (also saved as the `OUTPUT` record) from the same email run:
 
 **Q: I picked a category and a country that have no site in common.** Filters only narrow, so a filter that would leave nothing to check is left out and the run says so. None of the 48 adult and dating sites is based in India, for example, so all 48 are checked and the status message tells you where they are based. The same goes for a named site that is not in the list. Category counts are shown in the dropdown; most sites in the list are American or Indian.
 
-**Q: Can I run it with less memory?** Yes. Each step of the scan is its own process of about 300 MB, and the run starts as many at once as its memory holds: 8 at the default 4 GB, 5 at 2 GB, 2 at 1 GB. Less memory is slower, not broken. A step that still comes back empty is retried on its own, and any sites that could not be checked are counted in the summary (`sitesNotChecked`) with the reason, never reported as "no profile".
+**Q: Can I run it with less memory?** Yes. Each step of the scan is its own process of 300 to 450 MB, and the run starts as many at once as its memory holds: 8 at the default 4 GB, 4 at 2 GB, 1 at 1 GB. Less memory is slower, not broken. A step that still comes back empty is retried on its own, and any sites that could not be checked are counted in the summary (`sitesNotChecked`) with the reason, never reported as "no profile".
 
 **Q: My run found nothing.** The status message says so plainly, and the summary tells you how many sites had no profile and how many did not answer. Check the spelling, or switch to "Confident and possible matches" to see weaker matches. A handle that exists nowhere returns one summary row.
 

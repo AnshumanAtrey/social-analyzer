@@ -29,10 +29,11 @@ Wraps the qeeqbox/social-analyzer CLI in fast mode and adds what real user runs
   permissive detection level. The scanner's "slow" and "special" modes have no code
   behind them in 0.45, and its "extreme" level is a stricter gate that returns fewer
   hits, so neither is offered. Depth here means sites and detail, not a mode.
-- A status message that can never fail the run. SDK 3.x validates the run object
-  against an enum that lacks the APIFY_AI run origin (runs started by Apify's AI
-  chatbot); the message is stored server-side before that parse, so a parse error is
-  logged, not raised.
+- A status message that can never fail the run. SDK 3.x validated the run object
+  against an enum that lacked the APIFY_AI run origin (runs started by Apify's AI
+  chatbot); SDK 4 parses it, and the guard stays so no status-call error can turn a
+  finished run into a failed one. The message is stored server-side before any parse,
+  so an error is logged, not raised.
 - Scan steps sized to the run's memory. Each step is its own scanner process of about
   300 MB (more when CPU is short), so 8 run at once at the default 4 GB, 5 at 2 GB and 1
   at 1 GB (eight at 2 GB peaked at 2046 MB and lost two steps to the OOM killer). A step
@@ -544,9 +545,9 @@ def enrich(profile: dict, username: str, site_index: dict[str, dict], checked_at
 async def safe_status(message: str) -> None:
     """Set the run's status message without ever failing the run.
 
-    The message is stored by the API before the SDK parses the response; SDK 3.x
-    then validates the run object against an enum missing the APIFY_AI origin and
-    raises. That raise used to turn 8 finished runs a week into FAILED.
+    The message is stored by the API before the SDK parses the response. SDK 3.x
+    then validated the run object against an enum missing the APIFY_AI origin and
+    raised, which turned 8 finished runs a week into FAILED; SDK 4 parses it.
     """
     try:
         await Actor.set_status_message(message)

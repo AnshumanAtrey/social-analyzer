@@ -1,1 +1,1 @@
-apify>=3.4,<4  # pinned: SDK 4.0 made push_data's charging argument keyword-only (holehe outage 2026-09-12); last good builds ran 3.4.x
+apify>=4.1,<5  # SDK 4 parses APIFY_AI-origin runs (SDK 3.x raised on them); push_data's charged_event_name is passed by keyword as SDK 4 requires

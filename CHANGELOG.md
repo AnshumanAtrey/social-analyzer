@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.1] - 2026-10-28
+
+### Changed
+- Runs on Apify SDK 4. It reads runs started from Apify's AI assistant natively, so the status-message guard
+  added in 1.1.0 is now a second line of defense rather than the fix.
+
 ## [1.2.0] - 2026-10-07: runs that used to fail now answer
 
 Apify flagged the Actor for reliability: 23 of 211 runs failed in the 30 days to 2026-10-07. 13 of them came before

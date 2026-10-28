@@ -15,18 +15,38 @@
   },
   "pricing": {
     "apply": true,
-    "$comment": "v1.1.0 moves charging from apify-default-dataset-item ($0.005 per row incl. the summary) to a custom 'profile' event at the same $0.005, charged per step as rows are delivered; the summary row becomes free. Applied via API on 2026-09-12: the platform refused an immediate start (cannot-modify-actor-pricing-with-immediate-effect: a public Actor with users needs notice), so the record is scheduled to start 2026-09-26T22:14Z. Until then rows are still charged per dataset item by the platform and the code's 'profile' charges log a harmless unknown-event warning. The CI script will report the future record until it starts, then 'live prices match'. Event name must equal PROFILE_EVENT in src/main.py.",
+    "$comment": "v1.1.0 moves charging from apify-default-dataset-item ($0.005 per row incl. the summary) to a custom 'profile' event at the same $0.005, charged per step as rows are delivered; the summary row becomes free. Applied via API on 2026-09-12: the platform refused an immediate start (cannot-modify-actor-pricing-with-immediate-effect: a public Actor with users needs notice), so the record is scheduled to start 2026-09-26T22:14Z. Until then rows are still charged per dataset item by the platform and the code's 'profile' charges log a harmless unknown-event warning. The CI script will report the future record until it starts, then 'live prices match'. Event name must equal PROFILE_EVENT in src/main.py. Store discounts chosen by the owner on 2026-10-29 (Gentle ladder): Free and Starter keep the flat price, Scale pays 10% less, Business and above 20% less. Bulk buyers sit on Scale and Business (Aug-Oct revenue by tier), and the Console quality score asks for Store discounts. Deepening is immediate; undoing is an increase (14 days' notice). Review revenue by tier in mid-November.",
     "pricingInfos": [
       {
         "pricingModel": "PAY_PER_EVENT",
         "apifyMarginPercentage": 0.2,
-        "reasonForChange": "Same $0.005 per profile found, now charged step by step as rows are delivered instead of per dataset row; the summary row is free and cut-off runs pay only for what arrived.",
+        "reasonForChange": "Store discounts: Scale plans pay 10% less and Business and enterprise plans 20% less. Free and Starter prices are unchanged.",
         "pricingPerEvent": {
           "actorChargeEvents": {
             "profile": {
               "eventTitle": "Profile found",
               "eventDescription": "One profile row: platform, URL, confidence, match rate, site category and country, page title, language and meta tags. Charged as each step of the scan delivers its rows. The summary row is free.",
-              "eventPriceUsd": 0.005
+              "isPrimaryEvent": true,
+              "eventTieredPricingUsd": {
+                "FREE": {
+                  "tieredEventPriceUsd": 0.005
+                },
+                "BRONZE": {
+                  "tieredEventPriceUsd": 0.005
+                },
+                "SILVER": {
+                  "tieredEventPriceUsd": 0.0045
+                },
+                "GOLD": {
+                  "tieredEventPriceUsd": 0.004
+                },
+                "PLATINUM": {
+                  "tieredEventPriceUsd": 0.004
+                },
+                "DIAMOND": {
+                  "tieredEventPriceUsd": 0.004
+                }
+              }
             }
           }
         }

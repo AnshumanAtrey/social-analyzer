@@ -35,11 +35,13 @@ The scanner underneath is qeeqbox/social-analyzer (3,000+ GitHub stars). This ac
 
 ## What does it cost?
 
-| Event | Price | When it is charged |
-|---|---|---|
-| `Profile found` | $0.005 | Per profile row, charged as each step of the scan delivers its rows. The summary row is free. |
+| Event | Free and Starter plans | Scale plan | Business plan and above | When it is charged |
+|---|---|---|---|---|
+| `Profile found` | $0.005 | $0.0045 | $0.004 | Per profile row, charged as each step of the scan delivers its rows. The summary row is free. |
 
-Typical runs:
+Apify Store discounts: on the Scale plan you pay 10% less, on Business and above 20% less.
+
+Typical runs (Free and Starter price):
 
 | Job | Cost |
 |---|---|

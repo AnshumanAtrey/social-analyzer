@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.2] - 2026-10-29
+
+### Changed
+- Apify Store discounts: a profile costs $0.0045 on the Scale plan and $0.004 on Business and above. Free and Starter stay at $0.005.
+
 ## [1.2.1] - 2026-10-28
 
 ### Changed

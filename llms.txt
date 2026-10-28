@@ -37,12 +37,12 @@ Honest carve-outs (for trust):
 
 ## Pricing
 
-PAY_PER_EVENT model:
+PAY_PER_EVENT model, with Apify Store discounts on bigger plans:
 
-- `Profile Record`: $0.005 - Charged per dataset record produced: each detected profile and the summary row
+- `Profile found`: $0.005 (Scale plan $0.0045, Business plan and above $0.004) - Charged per profile row as each step of the scan delivers its rows. The summary row is free
 
-Typical costs:
-- One username, 5 profiles found: $0.03
+Typical costs (Free and Starter price):
+- One username, 5 profiles found: $0.025
 - One username, 30 profiles found: $0.15
 - Bulk 100 usernames (~15 profiles each): $7.50
 

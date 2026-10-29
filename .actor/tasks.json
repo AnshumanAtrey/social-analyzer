@@ -1,0 +1,36 @@
+{
+  "$comment": "Example tasks published on the Store by scripts/publish-tasks.mjs after every deploy (CI only). Each one is a search people type, with its own Google-indexed landing page and .md (manager/rules/SEO.md). Presets are organizations' handles, not a person's.",
+  "options": {
+    "build": "latest",
+    "memoryMbytes": 4096,
+    "timeoutSecs": 3600
+  },
+  "tasks": [
+    {
+      "name": "find-social-media-profiles-by-username",
+      "title": "Find social media profiles by username on 900+ sites",
+      "description": "Search one username across 900+ social networks, forums and websites with Social Analyzer and get each profile found with its link, the detection score and any name, bio and links the page shows. Replace nasa with the username you are looking for.",
+      "input": {
+        "username": "nasa"
+      },
+      "seoTitle": "Find Social Media Profiles by Username - 900+ Sites",
+      "seoDescription": "Search a username across 900+ social networks, forums and sites and get every profile found, scored, with name, bio and links. No login needed.",
+      "inputSchemaFields": ["username", "usernames", "filter", "siteType"],
+      "datasetView": "profiles"
+    },
+    {
+      "name": "username-checker-social-networks",
+      "title": "Username checker: which social networks have this handle",
+      "description": "Check a handle on social networks only and see where it is registered, with profile links and detection scores, the confirmed matches only. Useful before you register a brand handle, or to find a company's official profiles. Several usernames work in one run.",
+      "input": {
+        "username": "github",
+        "siteType": "social",
+        "filter": "good"
+      },
+      "seoTitle": "Username Checker - Social Networks With a Handle",
+      "seoDescription": "Check where a handle is registered on social networks, with profile links and scores, confirmed matches only. Several usernames in one run.",
+      "inputSchemaFields": ["username", "usernames", "siteType", "filter"],
+      "datasetView": "profiles"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 {
   "$comment": "Store listing fields that apify push never sends. Applied by scripts/store-metadata.mjs after every deploy. Title, description and categories live in actor.json.",
+  "actorId": "7NoHtRvgLlRuRI5Vq",
   "seoTitle": "Social Analyzer - Find Social Media by Username | Sherlock",
   "seoDescription": "Find someone's social media profiles from a username, across 900+ sites. Confidence-ranked, no login or API key. Paste a handle or link, we clean it. For recruiting, fraud checks, people search.",
   "exampleRunInput": {
@@ -15,12 +16,11 @@
   },
   "pricing": {
     "apply": true,
-    "$comment": "v1.1.0 moves charging from apify-default-dataset-item ($0.005 per row incl. the summary) to a custom 'profile' event at the same $0.005, charged per step as rows are delivered; the summary row becomes free. Applied via API on 2026-09-12: the platform refused an immediate start (cannot-modify-actor-pricing-with-immediate-effect: a public Actor with users needs notice), so the record is scheduled to start 2026-09-26T22:14Z. Until then rows are still charged per dataset item by the platform and the code's 'profile' charges log a harmless unknown-event warning. The CI script will report the future record until it starts, then 'live prices match'. Event name must equal PROFILE_EVENT in src/main.py. Store discounts chosen by the owner on 2026-10-29 (Gentle ladder): Free and Starter keep the flat price, Scale pays 10% less, Business and above 20% less. Bulk buyers sit on Scale and Business (Aug-Oct revenue by tier), and the Console quality score asks for Store discounts. Deepening is immediate; undoing is an increase (14 days' notice). Review revenue by tier in mid-November.",
+    "$comment": "v1.1.0 moves charging from apify-default-dataset-item ($0.005 per row incl. the summary) to a custom 'profile' event at the same $0.005, charged per step as rows are delivered; the summary row becomes free. Applied via API on 2026-09-12: the platform refused an immediate start (cannot-modify-actor-pricing-with-immediate-effect: a public Actor with users needs notice), so the record is scheduled to start 2026-09-26T22:14Z. Until then rows are still charged per dataset item by the platform and the code's 'profile' charges log a harmless unknown-event warning. The CI script will report the future record until it starts, then 'live prices match'. Event name must equal PROFILE_EVENT in src/main.py. Store discounts chosen by the owner on 2026-10-29 (Gentle ladder): Free and Starter keep the flat price, Scale pays 10% less, Business and above 20% less. Bulk buyers sit on Scale and Business (Aug-Oct revenue by tier), and the Console quality score asks for Store discounts. Deepening is immediate; undoing is an increase (14 days' notice). Review revenue by tier in mid-November. Store discounts (owner's Gentle ladder, rolled out 2026-10-29 after holehe and social-analyzer): Free and Starter keep the flat price, Scale pays 10% less, Business and above 20% less; apify-actor-start stays flat. Aug-Oct paid revenue of this actor came almost all from Starter, and Apify bills our platform cost of Scale and Business runs lower only when discounts are on (compute $0.16 and $0.13 per CU instead of $0.20, https://docs.apify.com/actors/monetize/pricing-and-costs.md). The CI script applies first-time pricing and decreases; increases go through Console with 14 days' notice.",
     "pricingInfos": [
       {
         "pricingModel": "PAY_PER_EVENT",
         "apifyMarginPercentage": 0.2,
-        "reasonForChange": "Store discounts: Scale plans pay 10% less and Business and enterprise plans 20% less. Free and Starter prices are unchanged.",
         "pricingPerEvent": {
           "actorChargeEvents": {
             "profile": {
@@ -49,7 +49,8 @@
               }
             }
           }
-        }
+        },
+        "reasonForChange": "Store discounts: Scale plans pay 10% less and Business and enterprise plans 20% less. Free and Starter prices are unchanged."
       }
     ]
   }

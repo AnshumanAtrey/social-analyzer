@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-11 (example pages)
+
+### Added
+- Five more example pages on the Store, each a setup of its own: gaming sites, developer and tech sites, design
+  portfolios, music and video sites, and a bulk search of several usernames on the 100 top sites. Each example ran on
+  the live build first (2026-11-11): nintendo 6 gaming profiles (run KMWNQJkhseTkayc9B), microsoft 17 developer
+  profiles (Ibq49j4ugEgBBj7FZ), adobe 2 portfolios (eVUkHnL5bexzcHf3a), netflix 12 music and video accounts
+  (3864afbXVrC4YyTZL), nasa, spacex and redbull 75 profiles (BkDaRwiJeD9Yfpu7g), each profile charged once.
+
 ## [1.2.2] - 2026-10-29
 
 ### Changed

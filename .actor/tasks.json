@@ -31,6 +31,76 @@
       "seoDescription": "Check where a handle is registered on social networks, with profile links and scores, confirmed matches only. Several usernames in one run.",
       "inputSchemaFields": ["username", "usernames", "siteType", "filter"],
       "datasetView": "profiles"
+    },
+    {
+      "name": "find-gaming-accounts-by-username",
+      "title": "Find gaming accounts by username on 82 gaming sites",
+      "description": "Search one gamer tag across 82 gaming sites, Twitch, Steam, Roblox, Chess.com and Xbox gamertags among them, and get each confirmed profile with its link and detection score. The example finds Nintendo on Chess.com, Kongregate and more. Replace nintendo with the username you are looking for; several usernames work in one run.",
+      "input": {
+        "username": "nintendo",
+        "siteType": "gaming",
+        "filter": "good"
+      },
+      "seoTitle": "Find Gaming Accounts by Username - Twitch, Steam, Roblox",
+      "seoDescription": "Search a gamer tag on 82 gaming sites like Twitch, Steam, Roblox and Chess.com and get each confirmed profile with its link. No login needed.",
+      "inputSchemaFields": ["username", "usernames", "siteType", "filter"],
+      "datasetView": "profiles"
+    },
+    {
+      "name": "find-developer-profiles-by-username",
+      "title": "Find developer profiles by username on 160+ tech sites",
+      "description": "Check one handle on 160+ developer and tech sites, GitHub, Gitee, Launchpad, Keybase, Pastebin and CodeChef among them, and get each confirmed profile with its link and detection score. The example finds Microsoft on GitHub, Gitee, Launchpad and more. Useful to vet a candidate or a company in developer communities. Replace microsoft with any username.",
+      "input": {
+        "username": "microsoft",
+        "siteType": "developer_tech",
+        "filter": "good"
+      },
+      "seoTitle": "Find Developer Profiles by Username - GitHub and 160+",
+      "seoDescription": "Search a username on 160+ developer and tech sites like GitHub, Gitee and Keybase and get each confirmed profile with its link. No login needed.",
+      "inputSchemaFields": ["username", "usernames", "siteType", "filter"],
+      "datasetView": "profiles"
+    },
+    {
+      "name": "find-design-portfolio-by-username",
+      "title": "Find design portfolios by username: Behance, Flickr, ArtStation",
+      "description": "Search one username on 19 photography and design sites, Behance, ArtStation, Flickr, Unsplash and VSCO among them, and get each confirmed portfolio with its link and detection score. The example finds Adobe on Behance and Flickr. Replace adobe with the designer, photographer or studio you are looking for.",
+      "input": {
+        "username": "adobe",
+        "siteType": "photo_design",
+        "filter": "good"
+      },
+      "seoTitle": "Find Design Portfolios by Username - Behance, ArtStation",
+      "seoDescription": "Search a username on 19 design and photo sites like Behance, ArtStation, Flickr and Unsplash and get each confirmed portfolio. No login needed.",
+      "inputSchemaFields": ["username", "usernames", "siteType", "filter"],
+      "datasetView": "profiles"
+    },
+    {
+      "name": "find-music-and-video-accounts-by-username",
+      "title": "Find music and video accounts by username: YouTube, SoundCloud",
+      "description": "Search one username on 52 music, video and entertainment sites, YouTube, Spotify, SoundCloud, Vimeo, Dailymotion and MyAnimeList among them, and get each confirmed account with its link and detection score. The example finds Netflix on YouTube, Vimeo, Giphy and more. Replace netflix with the artist, creator or brand you are looking for.",
+      "input": {
+        "username": "netflix",
+        "siteType": "entertainment",
+        "filter": "good"
+      },
+      "seoTitle": "Find Music and Video Accounts by Username - 52 Sites",
+      "seoDescription": "Search a username on 52 music and video sites like YouTube, Spotify, SoundCloud and Vimeo and get each confirmed account with its link. No login.",
+      "inputSchemaFields": ["username", "usernames", "siteType", "filter"],
+      "datasetView": "profiles"
+    },
+    {
+      "name": "bulk-username-search",
+      "title": "Bulk username search: many handles on the 100 top sites",
+      "description": "Paste up to 25 usernames, one per line, and check each on the 100 most popular sites, about 30 seconds per name, with every confirmed profile, its link and detection score, and a summary row for the run. The example checks nasa, spacex and redbull at once.",
+      "input": {
+        "usernames": ["nasa", "spacex", "redbull"],
+        "top": 100,
+        "filter": "good"
+      },
+      "seoTitle": "Bulk Username Search - Up to 25 Handles on Top 100 Sites",
+      "seoDescription": "Check up to 25 usernames at once on the 100 most popular sites and get every confirmed profile with its link and score. No login needed.",
+      "inputSchemaFields": ["usernames", "top", "filter"],
+      "datasetView": "profiles"
     }
   ]
 }

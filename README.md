@@ -6,6 +6,13 @@ Available as an [Apify Actor](https://apify.com/anshumanatrey/social-analyzer). 
 
 ---
 
+**Use it from an AI assistant:**
+
+- **Claude** (claude.ai and the desktop app): [Add Social Media Finder to Claude](https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=Social%20Media%20Finder&connectorUrl=https%3A%2F%2Fmcp.apify.com%3Ftools%3Danshumanatrey%2Fsocial-analyzer), click Continue, sign in to Apify, Allow, and ask in plain words.
+- **Claude Code:** `claude mcp add --transport http social-analyzer "https://mcp.apify.com?tools=anshumanatrey/social-analyzer"`, then run `/mcp` to sign in to Apify.
+- **Codex:** `codex mcp add social-analyzer --url "https://mcp.apify.com?tools=anshumanatrey/social-analyzer"`, then `codex mcp login social-analyzer`.
+- **Any other MCP client:** `https://mcp.apify.com?tools=anshumanatrey/social-analyzer`, signed in with Apify or an `Authorization: Bearer <APIFY_TOKEN>` header.
+
 ## What does it do?
 
 You give it one username, or a list, and nothing else is needed: with only the username set, the scan is the widest possible, all 999 sites, worldwide, every category, every match kept and labelled by confidence, page details and patterns extracted, one hour to do it. It checks those sites for a profile with exactly that handle and returns one row per profile it finds: the platform, the profile URL, how confident the match is, the site's category and country, the page title, its language and its meta tags. A summary row and an `OUTPUT` record say in plain words what was checked, how many sites had no profile, how many did not answer, and what came back.

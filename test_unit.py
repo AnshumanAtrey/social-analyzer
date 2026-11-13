@@ -270,6 +270,22 @@ d = Delivery(apify_stub.Actor.cm)
 assert asyncio.run(d.push([{'n': i} for i in range(5)])) == 2 and d.rows == 2 and d.limit and not d.can_pay()
 ok('Delivery: a limit below one profile ($0.003 < $0.005) is caught before any scan; rows past the limit are not counted as delivered')
 
+# 8b'. no username at all reads as the example, whose rows go out without the profile event ---------
+assert parse_usernames({}) == ([], []) and parse_usernames({'username': '  ', 'usernames': ['']}) == ([], [])
+pushed = []
+
+
+async def push_free(rows, charged_event_name=None):
+    pushed.append((len(rows), charged_event_name))
+    return types.SimpleNamespace(charged_count=0, event_charge_limit_reached=False)
+
+apify_stub.Actor.cm = FakeCharging('0.003')
+apify_stub.Actor.push_data = push_free
+d = Delivery(apify_stub.Actor.cm, free=True)
+assert d.can_pay() and asyncio.run(d.push([{'n': i} for i in range(5)])) == 5 and d.rows == 5 and pushed == [(5, None)]
+apify_stub.Actor.push_data = push_within_limit
+ok('Delivery: the example run (no username given) delivers every row with no event, even under a limit below one profile')
+
 # 8b. username only -> everything at maximum -----------------------------------------
 st = resolve_settings({'username': 'elonmusk'})
 assert st == {'top': 999, 'filter': 'all', 'extract': True, 'metadata': True, 'timeout': 3600}, st

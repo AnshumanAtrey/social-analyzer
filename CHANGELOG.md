@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-14
+
+### Changed
+- A run given no username (a blank field, which Apify's input check lets through, or an API call with neither
+  `username` nor `usernames`) no longer fails with "No username given". It searches the example elonmusk on the top
+  100 sites, free of charge, and says so in the status message, so the run shows what it returns. Text that was
+  typed but cannot be read as a username still fails the run with the reason.
+
 ## 2026-11-11 (example pages)
 
 ### Added

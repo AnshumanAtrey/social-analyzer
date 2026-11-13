@@ -72,6 +72,8 @@ BASE_MEMORY_MB = 400          # 2026-10-07: 8 at once peaked at 2591 MB of 4 GB;
                               # 4 took 189 s side by side; 2 at 1 GB lost one to the OOM killer while 1 peaked at 583 MB.
                               # A step holds more while it waits for CPU (1 vCPU per 4 GB), hence the larger base
 PROFILE_EVENT = 'profile'     # pay-per-event name for one profile row; the summary row is free
+EXAMPLE_USERNAME = 'elonmusk'  # the form's prefill: searched free when no username is given, instead of failing
+EXAMPLE_TOP = 100             # the example checks the top 100 sites only: it is free, so it is kept small
 SCANNER_FIELDS = 'link,rate,title,text,status,type,country,language,rank,extracted,metadata'
 MAX_USERNAMES = 25            # one scanner run per username
 MIN_SECONDS_PER_USERNAME = 20  # do not start a handle we cannot finish
@@ -598,14 +600,15 @@ def plural(n: int, word: str) -> str:
 class Delivery:
     """Pushes profile rows charged as PROFILE_EVENT and notices the spending limit (as maigret-username-search does)."""
 
-    def __init__(self, cm=None):
+    def __init__(self, cm=None, free: bool = False):
         self.cm = cm or Actor.get_charging_manager()
         self.ppe = self.cm.get_pricing_info().is_pay_per_event
         self.rows = 0
         self.limit = False
+        self.free = free                # the example run: rows delivered without the profile event
 
     def can_pay(self) -> bool:
-        if self.ppe and not self.limit:
+        if self.ppe and not self.limit and not self.free:
             left = self.cm.calculate_max_event_charge_count_within_limit(PROFILE_EVENT)
             self.limit = left is not None and left < 1
         return not self.limit
@@ -621,6 +624,10 @@ class Delivery:
         """Returns how many rows were delivered: the SDK drops the rows the limit cannot pay for."""
         if not rows:
             return 0
+        if self.free:
+            await Actor.push_data(rows)
+            self.rows += len(rows)
+            return len(rows)
         result = await Actor.push_data(rows, charged_event_name=PROFILE_EVENT)
         done = result.charged_count if self.ppe else len(rows)
         if self.ppe and (result.event_charge_limit_reached or done < len(rows)):
@@ -652,6 +659,14 @@ async def main() -> None:
             inp = {}                    # input that is not an object reads as no input
 
         targets, problems = parse_usernames(inp)
+        example = not targets and not problems
+        if example:
+            # No username at all (a blank field passes Apify's input check, and both fields are optional through the
+            # API): search the example instead of failing, free and on the top sites only, so the run shows what it
+            # returns (owner, 2026-11-14).
+            inp = {'username': EXAMPLE_USERNAME, 'top': EXAMPLE_TOP}
+            targets, problems = parse_usernames(inp)
+            Actor.log.warning(f'No username given, so this run searches the example {EXAMPLE_USERNAME}, free.')
         for p in problems:
             Actor.log.warning(p)
         if not targets:
@@ -713,7 +728,7 @@ async def main() -> None:
         platform_left = seconds_left_in_run()
         budget = user_limit if platform_left is None else min(user_limit, platform_left - RUN_SAFETY_MARGIN_S)
         deadline = time.monotonic() + budget
-        delivery = Delivery()
+        delivery = Delivery(free=example)
 
         checked_at = datetime.now(timezone.utc).isoformat()
         started = time.monotonic()
@@ -930,6 +945,9 @@ async def main() -> None:
                 headline += f' Stopped early by an unexpected error: {crash.rstrip(".")}.'
         if notes and not refused:
             headline += ' ' + ' '.join(notes)
+        if example:
+            headline = (f'No username was given, so this run searched the example {EXAMPLE_USERNAME} on the top '
+                        f'{EXAMPLE_TOP} sites, free of charge. Enter your own username to look up. {headline}')
 
         summary = {
             'recordType': 'summary',

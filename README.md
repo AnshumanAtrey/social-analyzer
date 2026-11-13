@@ -63,7 +63,7 @@ A run that finds nothing costs nothing. A form with no usable username stops bef
 
 | Field | Required | What it does |
 |---|---|---|
-| `username` | one of the two | The handle. Paste `@handle` or a profile link; separate several with commas. |
+| `username` | one of the two | The handle. Paste `@handle` or a profile link; separate several with commas. With neither field filled, the run searches the example elonmusk on the top 100 sites, free. |
 | `usernames` | one of the two | A list of handles, one per line, up to 25 per run. |
 | `top` | no | How many of the most popular sites to check. Default and maximum 999 (all of them); lower it for a quicker run. |
 | `websites` | no | Only these sites, by domain or partial name: `github.com`, `reddit`. Any of the 999 sites. |
